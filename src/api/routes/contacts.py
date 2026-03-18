@@ -24,10 +24,15 @@ async def list_contacts():
 @router.get("/{number}", response_model=ContactResponse)
 async def get_contact(number: str):
     """Get a single contact by phone number."""
-    from src.main import get_db
+    from src.main import get_db, get_pipeline
 
     db = get_db()
-    contact = await db.get_contact(number)
+    pipeline = get_pipeline()
+
+    # Normalize the number for lookup
+    normalized = pipeline.normalize(number)
+
+    contact = await db.get_contact(normalized)
     if not contact:
         raise HTTPException(status_code=404, detail=f"Contact '{number}' not found")
     return contact
@@ -36,12 +41,16 @@ async def get_contact(number: str):
 @router.post("", response_model=ContactResponse, status_code=201)
 async def create_contact(data: ContactCreate):
     """Create a new contact."""
-    from src.main import get_db
+    from src.main import get_db, get_pipeline
 
     db = get_db()
+    pipeline = get_pipeline()
+
+    # Normalize the number before storing
+    normalized = pipeline.normalize(data.number)
 
     # Check if contact already exists
-    existing = await db.get_contact(data.number)
+    existing = await db.get_contact(normalized)
     if existing:
         raise HTTPException(
             status_code=409,
@@ -49,7 +58,7 @@ async def create_contact(data: ContactCreate):
         )
 
     contact = await db.create_contact(
-        number=data.number,
+        number=normalized,
         name=data.name,
         tags=data.tags,
         notes=data.notes,
@@ -61,11 +70,16 @@ async def create_contact(data: ContactCreate):
 @router.put("/{number}", response_model=ContactResponse)
 async def update_contact(number: str, data: ContactUpdate):
     """Update an existing contact."""
-    from src.main import get_db
+    from src.main import get_db, get_pipeline
 
     db = get_db()
+    pipeline = get_pipeline()
+
+    # Normalize the number for lookup
+    normalized = pipeline.normalize(number)
+
     contact = await db.update_contact(
-        number,
+        normalized,
         name=data.name,
         tags=data.tags,
         notes=data.notes,
@@ -79,9 +93,14 @@ async def update_contact(number: str, data: ContactUpdate):
 @router.delete("/{number}", status_code=204)
 async def delete_contact(number: str):
     """Delete a contact."""
-    from src.main import get_db
+    from src.main import get_db, get_pipeline
 
     db = get_db()
-    deleted = await db.delete_contact(number)
+    pipeline = get_pipeline()
+
+    # Normalize the number for lookup
+    normalized = pipeline.normalize(number)
+
+    deleted = await db.delete_contact(normalized)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Contact '{number}' not found")
