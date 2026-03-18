@@ -1,0 +1,71 @@
+---
+name: "phone-logger"
+description: "Phone number resolver with Fritz!Box Callmonitor integration"
+url: "https://github.com/akentner/phone-logger"
+version: "0.1.0"
+slug: "phone-logger"
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+init: false
+ingress: true
+ingress_port: 8080
+panel_icon: "mdi:phone-log"
+panel_title: "Phone Logger"
+homeassistant_api: true
+map:
+  - type: addon_config
+    path: /addons_config/phone-logger
+options:
+  log_level: "INFO"
+  fritz_host: "192.168.178.1"
+  fritz_port: 1012
+  input_adapters:
+    - name: "fritz"
+      enabled: true
+    - name: "rest"
+      enabled: true
+    - name: "mqtt"
+      enabled: false
+  resolver_adapters:
+    - name: "json_file"
+      enabled: true
+    - name: "sqlite"
+      enabled: true
+    - name: "tellows"
+      enabled: true
+    - name: "dastelefon"
+      enabled: true
+    - name: "klartelbuch"
+      enabled: false
+  output_adapters:
+    - name: "call_log"
+      enabled: true
+    - name: "ha_webhook"
+      enabled: true
+    - name: "mqtt"
+      enabled: false
+  webhook_url: ""
+  webhook_token: ""
+  mqtt_broker: "homeassistant"
+  mqtt_topic_prefix: "phone-logger"
+schema:
+  log_level: list(DEBUG|INFO|WARNING|ERROR)
+  fritz_host: str
+  fritz_port: port
+  input_adapters:
+    - name: str
+      enabled: bool
+  resolver_adapters:
+    - name: str
+      enabled: bool
+  output_adapters:
+    - name: str
+      enabled: bool
+  webhook_url: url?
+  webhook_token: password?
+  mqtt_broker: str?
+  mqtt_topic_prefix: str?

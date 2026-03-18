@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Kontakte{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Kontakte</h2>
+        <button class="btn btn-primary" onclick="openAddModal()">+ Neuer Kontakt</button>
+    </div>
+    <div class="search-bar">
+        <input type="text" class="form-control" id="search" placeholder="Suche nach Nummer oder Name..." oninput="filterContacts()">
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nummer</th>
+                    <th>Name</th>
+                    <th>Tags</th>
+                    <th>Spam</th>
+                    <th>Quelle</th>
+                    <th>Zuletzt gesehen</th>
+                    <th>Aktionen</th>
+                </tr>
+            </thead>
+            <tbody id="contacts-table">
+                <tr><td colspan="7">Lade...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="contact-modal">
+    <div class="modal">
+        <h3 id="modal-title">Neuer Kontakt</h3>
+        <form id="contact-form" onsubmit="saveContact(event)">
+            <input type="hidden" id="edit-mode" value="create">
+            <div class="form-group">
+                <label for="number">Rufnummer</label>
+                <input type="text" class="form-control" id="number" required>
+            </div>
+            <div class="form-group">
+                <label for="name">Name</label>
+                <input type="text" class="form-control" id="name" required>
+            </div>
+            <div class="form-group">
+                <label for="tags">Tags (kommagetrennt)</label>
+                <input type="text" class="form-control" id="tags" placeholder="Familie, Arbeit, ...">
+            </div>
+            <div class="form-group">
+                <label for="notes">Notizen</label>
+                <textarea class="form-control" id="notes" rows="2"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="spam_score">Spam Score (1-10)</label>
+                <input type="number" class="form-control" id="spam_score" min="1" max="10">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="closeModal()">Abbrechen</button>
+                <button type="submit" class="btn btn-primary">Speichern</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let allContacts = [];
+
+    async function loadContacts() {
+        try {
+            allContacts = await apiCall('/api/contacts');
+            renderContacts(allContacts);
+        } catch (e) {
+            showAlert('Fehler beim Laden: ' + e.message, 'error');
+        }
+    }
+
+    function renderContacts(contacts) {
+        const tbody = document.getElementById('contacts-table');
+        if (contacts.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7">Keine Kontakte vorhanden</td></tr>';
+            return;
+        }
+        tbody.innerHTML = contacts.map(c => `
+            <tr>
+                <td><strong>${c.number}</strong></td>
+                <td>${c.name}</td>
+                <td>${(c.tags || []).map(t => `<span class="tag">${t}</span>`).join('')}</td>
+                <td>${c.spam_score ? `<span class="spam-score ${spamScoreClass(c.spam_score)}">${c.spam_score}</span>` : '-'}</td>
+                <td>${c.source}</td>
+                <td>${formatDate(c.last_seen)}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline" onclick="editContact('${c.number}')">Bearbeiten</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteContact('${c.number}')">Löschen</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function filterContacts() {
+        const q = document.getElementById('search').value.toLowerCase();
+        const filtered = allContacts.filter(c => 
+            c.number.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+        );
+        renderContacts(filtered);
+    }
+
+    function openAddModal() {
+        document.getElementById('modal-title').textContent = 'Neuer Kontakt';
+        document.getElementById('edit-mode').value = 'create';
+        document.getElementById('number').disabled = false;
+        document.getElementById('contact-form').reset();
+        document.getElementById('contact-modal').classList.add('active');
+    }
+
+    function editContact(number) {
+        const c = allContacts.find(c => c.number === number);
+        if (!c) return;
+        document.getElementById('modal-title').textContent = 'Kontakt bearbeiten';
+        document.getElementById('edit-mode').value = 'edit';
+        document.getElementById('number').value = c.number;
+        document.getElementById('number').disabled = true;
+        document.getElementById('name').value = c.name;
+        document.getElementById('tags').value = (c.tags || []).join(', ');
+        document.getElementById('notes').value = c.notes || '';
+        document.getElementById('spam_score').value = c.spam_score || '';
+        document.getElementById('contact-modal').classList.add('active');
+    }
+
+    function closeModal() {
+        document.getElementById('contact-modal').classList.remove('active');
+    }
+
+    async function saveContact(event) {
+        event.preventDefault();
+        const mode = document.getElementById('edit-mode').value;
+        const number = document.getElementById('number').value;
+        const data = {
+            number: number,
+            name: document.getElementById('name').value,
+            tags: document.getElementById('tags').value.split(',').map(t => t.trim()).filter(Boolean),
+            notes: document.getElementById('notes').value || null,
+            spam_score: document.getElementById('spam_score').value ? parseInt(document.getElementById('spam_score').value) : null,
+        };
+
+        try {
+            if (mode === 'create') {
+                await apiCall('/api/contacts', { method: 'POST', body: JSON.stringify(data) });
+                showAlert('Kontakt erstellt');
+            } else {
+                await apiCall(`/api/contacts/${encodeURIComponent(number)}`, { method: 'PUT', body: JSON.stringify(data) });
+                showAlert('Kontakt aktualisiert');
+            }
+            closeModal();
+            loadContacts();
+        } catch (e) {
+            showAlert('Fehler: ' + e.message, 'error');
+        }
+    }
+
+    async function deleteContact(number) {
+        if (!confirm(`Kontakt "${number}" wirklich löschen?`)) return;
+        try {
+            await apiCall(`/api/contacts/${encodeURIComponent(number)}`, { method: 'DELETE' });
+            showAlert('Kontakt gelöscht');
+            loadContacts();
+        } catch (e) {
+            showAlert('Fehler: ' + e.message, 'error');
+        }
+    }
+
+    // Load on page ready
+    loadContacts();
+</script>
+{% endblock %}

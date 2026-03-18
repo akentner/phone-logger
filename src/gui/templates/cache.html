@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Cache{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Webservice Cache</h2>
+        <button class="btn btn-danger" onclick="cleanupCache()">Abgelaufene entfernen</button>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nummer</th>
+                    <th>Adapter</th>
+                    <th>Name</th>
+                    <th>Spam</th>
+                    <th>Gecacht am</th>
+                    <th>TTL</th>
+                    <th>Status</th>
+                    <th>Aktionen</th>
+                </tr>
+            </thead>
+            <tbody id="cache-table">
+                <tr><td colspan="8">Lade...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function loadCache() {
+        try {
+            const data = await apiCall('/api/cache');
+            renderCache(data);
+        } catch (e) {
+            showAlert('Fehler beim Laden: ' + e.message, 'error');
+        }
+    }
+
+    function renderCache(data) {
+        const tbody = document.getElementById('cache-table');
+        if (data.items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8">Cache ist leer</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = data.items.map(c => `
+            <tr>
+                <td><strong>${c.number}</strong></td>
+                <td>${c.adapter}</td>
+                <td>${c.result_name || '-'}</td>
+                <td>${c.spam_score ? `<span class="spam-score ${spamScoreClass(c.spam_score)}">${c.spam_score}</span>` : '-'}</td>
+                <td>${formatDate(c.cached_at)}</td>
+                <td>${c.ttl_days} Tage</td>
+                <td>
+                    <span class="status-badge ${c.expired ? 'status-expired' : 'status-active'}"></span>
+                    ${c.expired ? 'Abgelaufen' : 'Gültig'}
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-danger" onclick="deleteCache('${c.number}')">Löschen</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function deleteCache(number) {
+        try {
+            await apiCall(`/api/cache/${encodeURIComponent(number)}`, { method: 'DELETE' });
+            showAlert('Cache-Eintrag gelöscht');
+            loadCache();
+        } catch (e) {
+            showAlert('Fehler: ' + e.message, 'error');
+        }
+    }
+
+    async function cleanupCache() {
+        try {
+            const result = await apiCall('/api/cache/cleanup', { method: 'POST' });
+            showAlert(`${result.removed} abgelaufene Einträge entfernt`);
+            loadCache();
+        } catch (e) {
+            showAlert('Fehler: ' + e.message, 'error');
+        }
+    }
+
+    loadCache();
+</script>
+{% endblock %}

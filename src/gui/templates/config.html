@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Konfiguration{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Konfiguration</h2>
+    </div>
+    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+        Die Adapter-Konfiguration wird über die HA Addon-Einstellungen oder die YAML-Konfigurationsdatei verwaltet.
+        Hier sehen Sie die aktuelle aktive Konfiguration.
+    </p>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Input-Adapter</h2>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr><th>Reihenfolge</th><th>Name</th><th>Status</th><th>Konfiguration</th></tr>
+            </thead>
+            <tbody id="input-adapters"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Resolver-Adapter (Chain-of-Responsibility)</h2>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr><th>Reihenfolge</th><th>Name</th><th>Status</th><th>Konfiguration</th></tr>
+            </thead>
+            <tbody id="resolver-adapters"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Output-Adapter</h2>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr><th>Reihenfolge</th><th>Name</th><th>Status</th><th>Konfiguration</th></tr>
+            </thead>
+            <tbody id="output-adapters"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Resolve Test -->
+<div class="card">
+    <div class="card-header">
+        <h2>Rufnummer testen</h2>
+    </div>
+    <div class="search-bar">
+        <input type="text" class="form-control" id="test-number" placeholder="Rufnummer eingeben...">
+        <button class="btn btn-primary" onclick="testResolve()">Auflösen</button>
+    </div>
+    <div id="resolve-result" style="display:none;">
+        <pre id="resolve-json" style="background:#f5f5f5; padding:1rem; border-radius:var(--radius); font-size:0.85rem; overflow-x:auto;"></pre>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function loadConfig() {
+        try {
+            const data = await apiCall('/api/config');
+            renderAdapters('input-adapters', data.input_adapters);
+            renderAdapters('resolver-adapters', data.resolver_adapters);
+            renderAdapters('output-adapters', data.output_adapters);
+        } catch (e) {
+            showAlert('Fehler beim Laden: ' + e.message, 'error');
+        }
+    }
+
+    function renderAdapters(tableId, adapters) {
+        const tbody = document.getElementById(tableId);
+        tbody.innerHTML = adapters.map(a => `
+            <tr>
+                <td>${a.order + 1}</td>
+                <td><strong>${a.name}</strong></td>
+                <td>
+                    <span class="status-badge ${a.enabled ? 'status-active' : 'status-inactive'}"></span>
+                    ${a.enabled ? 'Aktiv' : 'Deaktiviert'}
+                </td>
+                <td><code>${Object.keys(a.config).length > 0 ? JSON.stringify(a.config) : '-'}</code></td>
+            </tr>
+        `).join('');
+    }
+
+    async function testResolve() {
+        const number = document.getElementById('test-number').value;
+        if (!number) return;
+
+        const resultDiv = document.getElementById('resolve-result');
+        const resultJson = document.getElementById('resolve-json');
+
+        try {
+            const result = await apiCall(`/api/resolve/${encodeURIComponent(number)}`);
+            resultJson.textContent = JSON.stringify(result, null, 2);
+            resultDiv.style.display = 'block';
+        } catch (e) {
+            resultJson.textContent = `Nicht auflösbar: ${e.message}`;
+            resultDiv.style.display = 'block';
+        }
+    }
+
+    document.getElementById('test-number').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') testResolve();
+    });
+
+    loadConfig();
+</script>
+{% endblock %}
