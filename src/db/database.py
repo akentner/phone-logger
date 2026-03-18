@@ -48,7 +48,21 @@ class Database:
         schema = schema_path.read_text()
         await self.db.executescript(schema)
         await self.db.commit()
+        await self._run_migrations()
         logger.info("Database schema initialized")
+
+    async def _run_migrations(self) -> None:
+        """Run any pending migrations."""
+        # Check if number_type column exists
+        cursor = await self.db.execute("PRAGMA table_info(contacts)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        
+        if "number_type" not in columns:
+            logger.info("Running migration: add_number_type column")
+            await self.db.execute(
+                "ALTER TABLE contacts ADD COLUMN number_type TEXT DEFAULT 'private'"
+            )
+            await self.db.commit()
 
     # --- Contact Operations ---
 
@@ -68,16 +82,16 @@ class Database:
         row = await cursor.fetchone()
         return self._row_to_contact(row) if row else None
 
-    async def create_contact(self, number: str, name: str, tags: list[str] | None = None,
-                             notes: str | None = None, spam_score: int | None = None,
-                             source: str = "sqlite") -> dict:
+    async def create_contact(self, number: str, name: str, number_type: str = "private",
+                             tags: list[str] | None = None, notes: str | None = None,
+                             spam_score: int | None = None, source: str = "sqlite") -> dict:
         """Create a new contact."""
         now = datetime.now().isoformat()
         tags_json = json.dumps(tags or [])
         await self.db.execute(
-            """INSERT INTO contacts (number, name, tags, notes, spam_score, source, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (number, name, tags_json, notes, spam_score, source, now, now),
+            """INSERT INTO contacts (number, name, number_type, tags, notes, spam_score, source, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (number, name, number_type, tags_json, notes, spam_score, source, now, now),
         )
         await self.db.commit()
         return await self.get_contact(number)
@@ -91,7 +105,7 @@ class Database:
         updates = []
         params = []
         for key, value in kwargs.items():
-            if value is not None and key in ("name", "tags", "notes", "spam_score"):
+            if value is not None and key in ("name", "number_type", "tags", "notes", "spam_score"):
                 if key == "tags":
                     value = json.dumps(value)
                 updates.append(f"{key} = ?")

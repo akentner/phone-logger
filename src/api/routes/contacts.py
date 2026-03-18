@@ -60,6 +60,7 @@ async def create_contact(data: ContactCreate):
     contact = await db.create_contact(
         number=normalized,
         name=data.name,
+        number_type=data.number_type.value,
         tags=data.tags,
         notes=data.notes,
         spam_score=data.spam_score,
@@ -81,6 +82,7 @@ async def update_contact(number: str, data: ContactUpdate):
     contact = await db.update_contact(
         normalized,
         name=data.name,
+        number_type=data.number_type.value if data.number_type else None,
         tags=data.tags,
         notes=data.notes,
         spam_score=data.spam_score,

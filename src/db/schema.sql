@@ -3,6 +3,7 @@
 CREATE TABLE IF NOT EXISTS contacts (
     number TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    number_type TEXT DEFAULT 'private',  -- 'private', 'business', 'mobile'
     tags TEXT DEFAULT '[]',          -- JSON array
     notes TEXT,
     spam_score INTEGER,
@@ -36,3 +37,10 @@ CREATE INDEX IF NOT EXISTS idx_call_log_number ON call_log(number);
 CREATE INDEX IF NOT EXISTS idx_call_log_timestamp ON call_log(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_cache_adapter ON cache(adapter);
 CREATE INDEX IF NOT EXISTS idx_cache_cached_at ON cache(cached_at);
+
+-- Migrations: Add number_type column if it doesn't exist
+-- SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we use a workaround
+CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY);
+
+INSERT OR IGNORE INTO _migrations (name) VALUES ('add_number_type');
+-- The actual column addition happens in Python code (Database._run_migrations)

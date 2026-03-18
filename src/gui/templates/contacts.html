@@ -16,6 +16,7 @@
                 <tr>
                     <th>Nummer</th>
                     <th>Name</th>
+                    <th>Typ</th>
                     <th>Tags</th>
                     <th>Spam</th>
                     <th>Quelle</th>
@@ -24,7 +25,7 @@
                 </tr>
             </thead>
             <tbody id="contacts-table">
-                <tr><td colspan="7">Lade...</td></tr>
+                <tr><td colspan="8">Lade...</td></tr>
             </tbody>
         </table>
     </div>
@@ -43,6 +44,14 @@
             <div class="form-group">
                 <label for="name">Name</label>
                 <input type="text" class="form-control" id="name" required>
+            </div>
+            <div class="form-group">
+                <label for="number_type">Typ</label>
+                <select class="form-control" id="number_type">
+                    <option value="private" id="opt-private">Privat</option>
+                    <option value="business" id="opt-business">Geschäftlich</option>
+                    <option value="mobile" id="opt-mobile">Mobil</option>
+                </select>
             </div>
             <div class="form-group">
                 <label for="tags">Tags (kommagetrennt)</label>
@@ -71,23 +80,38 @@
 
     async function loadContacts() {
         try {
+            // Ensure translations are loaded
+            await loadTranslations('de');
             allContacts = await apiCall('/api/contacts');
             renderContacts(allContacts);
+            updateFormLabels();
         } catch (e) {
             showAlert('Fehler beim Laden: ' + e.message, 'error');
         }
     }
 
+    function updateFormLabels() {
+        // Update select options with translations
+        document.getElementById('opt-private').textContent = t('number_type.private');
+        document.getElementById('opt-business').textContent = t('number_type.business');
+        document.getElementById('opt-mobile').textContent = t('number_type.mobile');
+    }
+
+    function getNumberTypeLabel(type) {
+        return t(`number_type.${type}`) || type;
+    }
+
     function renderContacts(contacts) {
         const tbody = document.getElementById('contacts-table');
         if (contacts.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7">Keine Kontakte vorhanden</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8">Keine Kontakte vorhanden</td></tr>';
             return;
         }
         tbody.innerHTML = contacts.map(c => `
             <tr>
                 <td><strong>${c.number}</strong></td>
                 <td>${c.name}</td>
+                <td><span class="number-type number-type-${c.number_type || 'private'}">${getNumberTypeLabel(c.number_type || 'private')}</span></td>
                 <td>${(c.tags || []).map(t => `<span class="tag">${t}</span>`).join('')}</td>
                 <td>${c.spam_score ? `<span class="spam-score ${spamScoreClass(c.spam_score)}">${c.spam_score}</span>` : '-'}</td>
                 <td>${c.source}</td>
@@ -113,6 +137,7 @@
         document.getElementById('edit-mode').value = 'create';
         document.getElementById('number').disabled = false;
         document.getElementById('contact-form').reset();
+        document.getElementById('number_type').value = 'private';
         document.getElementById('contact-modal').classList.add('active');
     }
 
@@ -124,6 +149,7 @@
         document.getElementById('number').value = c.number;
         document.getElementById('number').disabled = true;
         document.getElementById('name').value = c.name;
+        document.getElementById('number_type').value = c.number_type || 'private';
         document.getElementById('tags').value = (c.tags || []).join(', ');
         document.getElementById('notes').value = c.notes || '';
         document.getElementById('spam_score').value = c.spam_score || '';
@@ -141,6 +167,7 @@
         const data = {
             number: number,
             name: document.getElementById('name').value,
+            number_type: document.getElementById('number_type').value,
             tags: document.getElementById('tags').value.split(',').map(t => t.trim()).filter(Boolean),
             notes: document.getElementById('notes').value || null,
             spam_score: document.getElementById('spam_score').value ? parseInt(document.getElementById('spam_score').value) : null,

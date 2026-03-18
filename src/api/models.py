@@ -1,9 +1,18 @@
 """Pydantic models for the REST API."""
 
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+
+class NumberType(str, Enum):
+    """Type of phone number for contacts."""
+
+    PRIVATE = "private"
+    BUSINESS = "business"
+    MOBILE = "mobile"
 
 
 # --- Contact Models ---
@@ -14,6 +23,7 @@ class ContactCreate(BaseModel):
 
     number: str = Field(..., min_length=3, description="Phone number")
     name: str = Field(..., min_length=1, description="Contact name")
+    number_type: NumberType = Field(default=NumberType.PRIVATE, description="Type of phone number")
     tags: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
     spam_score: Optional[int] = Field(None, ge=1, le=10)
@@ -23,6 +33,7 @@ class ContactUpdate(BaseModel):
     """Request model for updating a contact."""
 
     name: Optional[str] = Field(None, min_length=1)
+    number_type: Optional[NumberType] = None
     tags: Optional[list[str]] = None
     notes: Optional[str] = None
     spam_score: Optional[int] = Field(None, ge=1, le=10)
@@ -33,6 +44,7 @@ class ContactResponse(BaseModel):
 
     number: str
     name: str
+    number_type: NumberType = Field(default=NumberType.PRIVATE)
     tags: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
     spam_score: Optional[int] = None

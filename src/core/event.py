@@ -23,6 +23,14 @@ class CallEventType(str, Enum):
     DISCONNECT = "disconnect"  # Call ended
 
 
+class NumberType(str, Enum):
+    """Type of phone number for contacts."""
+
+    PRIVATE = "private"
+    BUSINESS = "business"
+    MOBILE = "mobile"
+
+
 class CallEvent(BaseModel):
     """Normalized call event from any input adapter."""
 
