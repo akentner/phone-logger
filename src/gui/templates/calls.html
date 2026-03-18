@@ -5,22 +5,26 @@
 <div class="card">
     <div class="card-header">
         <h2>Anruf-Historie</h2>
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                <input type="radio" id="view-history" name="view" value="history" checked onchange="switchView('history')">
+                <span>Aggregierte Anrufe</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                <input type="radio" id="view-events" name="view" value="events" onchange="switchView('events')">
+                <span>Rohe Events</span>
+            </label>
+        </div>
     </div>
     <div class="search-bar">
-        <input type="text" class="form-control" id="search-number" placeholder="Rufnummer filtern...">
+        <input type="text" class="form-control" id="search-filter" placeholder="Nummer oder Filter...">
         <button class="btn btn-primary" onclick="loadCalls()">Suchen</button>
     </div>
     <div class="table-wrapper">
         <table>
             <thead>
-                <tr>
-                    <th>Zeitpunkt</th>
-                    <th>Richtung</th>
-                    <th>Event</th>
-                    <th>Nummer</th>
-                    <th>Name</th>
-                    <th>Quelle</th>
-                    <th>Aktionen</th>
+                <tr id="header-row">
+                    <!-- Headers will be updated based on view -->
                 </tr>
             </thead>
             <tbody id="calls-table">
@@ -35,13 +39,35 @@
 {% block scripts %}
 <script>
     let currentPage = 1;
+    let currentView = 'history'; // 'history' or 'events'
     const pageSize = 50;
+
+    function switchView(view) {
+        currentView = view;
+        currentPage = 1;
+        loadCalls();
+    }
 
     async function loadCalls(page = 1) {
         currentPage = page;
-        const number = document.getElementById('search-number').value;
-        let url = `/api/calls?page=${page}&page_size=${pageSize}`;
-        if (number) url += `&number=${encodeURIComponent(number)}`;
+        const filter = document.getElementById('search-filter').value;
+        
+        let url;
+        if (currentView === 'history') {
+            url = `/api/calls?page=${page}&page_size=${pageSize}`;
+            // Add filters for aggregated calls
+            if (filter) {
+                // Could filter by direction or status if filter matches
+                if (['inbound', 'ausgehend', 'eingehend'].includes(filter.toLowerCase())) {
+                    url += `&direction=${filter.toLowerCase().startsWith('ausgehend') || filter.toLowerCase().startsWith('outbound') ? 'outbound' : 'inbound'}`;
+                } else if (['answered', 'beantwortet', 'missed', 'verpasst', 'notReached'].includes(filter.toLowerCase())) {
+                    url += `&status=${filter.toLowerCase()}`;
+                }
+            }
+        } else {
+            url = `/api/calls/events?page=${page}&page_size=${pageSize}`;
+            if (filter) url += `&number=${encodeURIComponent(filter)}`;
+        }
 
         try {
             const data = await apiCall(url);
@@ -53,29 +79,85 @@
 
     function renderCalls(data) {
         const tbody = document.getElementById('calls-table');
-        if (data.items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7">Keine Anrufe vorhanden</td></tr>';
-            document.getElementById('pagination').innerHTML = '';
-            return;
-        }
+        const headerRow = document.getElementById('header-row');
+        
+        if (currentView === 'history') {
+            // Aggregated calls view
+            headerRow.innerHTML = `
+                <th>Beginn</th>
+                <th>Status</th>
+                <th>Richtung</th>
+                <th>Anrufer</th>
+                <th>Angerufener</th>
+                <th>Gerät</th>
+                <th>Dauer</th>
+                <th>Aktionen</th>
+            `;
+            
+            if (data.items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8">Keine Anrufe vorhanden</td></tr>';
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
 
-        tbody.innerHTML = data.items.map(c => `
-            <tr>
-                <td>${formatDate(c.timestamp)}</td>
-                <td>
-                    <span class="${c.direction === 'inbound' ? 'direction-in' : 'direction-out'}">
-                        ${c.direction === 'inbound' ? '&#x2199;&#xFE0F; Eingehend' : '&#x2197;&#xFE0F; Ausgehend'}
-                    </span>
-                </td>
-                <td>${c.event_type}</td>
-                <td><strong>${c.number}</strong></td>
-                <td>${c.resolved_name || '<em style="color:var(--text-secondary)">Unbekannt</em>'}</td>
-                <td>${c.source || '-'}</td>
-                <td>
-                    <button class="btn btn-sm btn-outline" onclick="resolveNumber('${c.number}')">Auflösen</button>
-                </td>
-            </tr>
-        `).join('');
+            tbody.innerHTML = data.items.map(c => `
+                <tr>
+                    <td>${formatDate(c.started_at)}</td>
+                    <td>
+                        <span class="status-badge status-${c.status}">
+                            ${getStatusLabel(c.status)}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="${c.direction === 'inbound' ? 'direction-in' : 'direction-out'}">
+                            ${c.direction === 'inbound' ? '&#x2199;&#xFE0F; Eingehend' : '&#x2197;&#xFE0F; Ausgehend'}
+                        </span>
+                    </td>
+                    <td><strong>${c.caller_number}</strong></td>
+                    <td><strong>${c.called_number}</strong></td>
+                    <td>${c.device || c.device_type || '-'}</td>
+                    <td>${c.duration_seconds !== null ? formatDuration(c.duration_seconds) : '-'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline" onclick="resolveNumber('${c.caller_number}')">Details</button>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            // Raw events view
+            headerRow.innerHTML = `
+                <th>Zeitpunkt</th>
+                <th>Richtung</th>
+                <th>Event</th>
+                <th>Nummer</th>
+                <th>Name</th>
+                <th>Quelle</th>
+                <th>Aktionen</th>
+            `;
+            
+            if (data.items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7">Keine Events vorhanden</td></tr>';
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+
+            tbody.innerHTML = data.items.map(c => `
+                <tr>
+                    <td>${formatDate(c.timestamp)}</td>
+                    <td>
+                        <span class="${c.direction === 'inbound' ? 'direction-in' : 'direction-out'}">
+                            ${c.direction === 'inbound' ? '&#x2199;&#xFE0F; Eingehend' : '&#x2197;&#xFE0F; Ausgehend'}
+                        </span>
+                    </td>
+                    <td>${c.event_type}</td>
+                    <td><strong>${c.number}</strong></td>
+                    <td>${c.resolved_name || '<em style="color:var(--text-secondary)">Unbekannt</em>'}</td>
+                    <td>${c.source || '-'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline" onclick="resolveNumber('${c.number}')">Auflösen</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
 
         // Pagination
         const totalPages = Math.ceil(data.total / pageSize);
@@ -95,6 +177,24 @@
         pag.innerHTML = html;
     }
 
+    function getStatusLabel(status) {
+        const labels = {
+            'ringing': '📞 Klingelt',
+            'dialing': '📱 Wählt',
+            'answered': '✅ Beantwortet',
+            'missed': '❌ Verpasst',
+            'notReached': '🚫 Nicht erreichbar'
+        };
+        return labels[status] || status;
+    }
+
+    function formatDuration(seconds) {
+        if (seconds < 60) return `${seconds}s`;
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}m ${secs}s`;
+    }
+
     async function resolveNumber(number) {
         try {
             const result = await apiCall(`/api/resolve/${encodeURIComponent(number)}`);
@@ -104,10 +204,44 @@
         }
     }
 
-    document.getElementById('search-number').addEventListener('keydown', (e) => {
+    document.getElementById('search-filter').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') loadCalls();
     });
 
     loadCalls();
 </script>
+
+<style>
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-weight: 500;
+}
+
+.status-answered {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-missed {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.status-ringing {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.status-dialing {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.status-notReached {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+</style>
 {% endblock %}

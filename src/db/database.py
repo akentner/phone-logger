@@ -8,6 +8,8 @@ from typing import Optional
 
 import aiosqlite
 
+from src.core.utils import uuid7
+
 logger = logging.getLogger(__name__)
 
 
@@ -256,6 +258,163 @@ class Database:
         rows = await cursor.fetchall()
         return [dict(row) for row in rows], total
 
+    # --- Call Aggregation Operations ---
+
+    async def upsert_call(
+        self,
+        call_id: str,
+        connection_id: int,
+        caller_number: str,
+        called_number: str,
+        direction: str,
+        status: str,
+        device: Optional[str] = None,
+        device_type: Optional[str] = None,
+        msn: Optional[str] = None,
+        trunk_id: Optional[str] = None,
+        line_id: Optional[int] = None,
+        is_internal: bool = False,
+        started_at: Optional[str] = None,
+        connected_at: Optional[str] = None,
+        finished_at: Optional[str] = None,
+        duration_seconds: Optional[int] = None,
+        resolved_name: Optional[str] = None,
+    ) -> dict:
+        """Insert or update an aggregated call.
+        
+        Args:
+            call_id: UUIDv7 call identifier
+            connection_id: Fritz connection_id for call correlation
+            caller_number: Caller's phone number
+            called_number: Called party's phone number
+            direction: 'inbound' or 'outbound'
+            status: 'ringing', 'dialing', 'answered', 'missed', 'notReached'
+            device: Device name (optional)
+            device_type: Device type (optional)
+            msn: MSN involved in the call (optional)
+            trunk_id: Trunk identifier (optional)
+            line_id: Line ID (optional)
+            is_internal: Whether both parties are internal MSNs
+            started_at: When the call started (RING/CALL event)
+            connected_at: When the call connected (CONNECT event)
+            finished_at: When the call finished (DISCONNECT event)
+            duration_seconds: Call duration in seconds
+            resolved_name: Resolved name from resolver adapters
+        
+        Returns:
+            The call record as a dictionary
+        """
+        now = datetime.now().isoformat()
+        
+        # Check if call exists
+        cursor = await self.db.execute(
+            "SELECT id FROM calls WHERE id = ?", (call_id,)
+        )
+        existing = await cursor.fetchone()
+        
+        if existing:
+            # Update existing call
+            await self.db.execute(
+                """UPDATE calls SET
+                   status = ?, device = ?, device_type = ?, msn = ?, trunk_id = ?,
+                   line_id = ?, is_internal = ?, connected_at = ?, finished_at = ?,
+                   duration_seconds = ?, resolved_name = ?, updated_at = ?
+                   WHERE id = ?""",
+                (
+                    status, device, device_type, msn, trunk_id,
+                    line_id, 1 if is_internal else 0, connected_at, finished_at,
+                    duration_seconds, resolved_name, now, call_id
+                ),
+            )
+        else:
+            # Create new call
+            await self.db.execute(
+                """INSERT INTO calls (
+                   id, connection_id, caller_number, called_number, direction, status,
+                   device, device_type, msn, trunk_id, line_id, is_internal,
+                   started_at, connected_at, finished_at, duration_seconds,
+                   resolved_name, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    call_id, connection_id, caller_number, called_number, direction, status,
+                    device, device_type, msn, trunk_id, line_id, 1 if is_internal else 0,
+                    started_at or now, connected_at, finished_at, duration_seconds,
+                    resolved_name, now, now
+                ),
+            )
+        
+        await self.db.commit()
+        return await self.get_call(call_id)
+
+    async def get_call(self, call_id: str) -> Optional[dict]:
+        """Get a single call by ID."""
+        cursor = await self.db.execute(
+            "SELECT * FROM calls WHERE id = ?", (call_id,)
+        )
+        row = await cursor.fetchone()
+        return self._row_to_call(row) if row else None
+
+    async def get_calls(
+        self,
+        page: int = 1,
+        page_size: int = 50,
+        direction: Optional[str] = None,
+        status: Optional[str] = None,
+        line_id: Optional[int] = None,
+    ) -> tuple[list[dict], int]:
+        """Get paginated aggregated calls.
+        
+        Args:
+            page: Page number (1-indexed)
+            page_size: Number of items per page
+            direction: Filter by 'inbound' or 'outbound' (optional)
+            status: Filter by status (optional)
+            line_id: Filter by line ID (optional)
+        
+        Returns:
+            Tuple of (call records, total count)
+        """
+        where_clauses = []
+        params: list = []
+        
+        if direction:
+            where_clauses.append("direction = ?")
+            params.append(direction)
+        if status:
+            where_clauses.append("status = ?")
+            params.append(status)
+        if line_id is not None:
+            where_clauses.append("line_id = ?")
+            params.append(line_id)
+        
+        where = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+        
+        # Get total count
+        count_cursor = await self.db.execute(
+            f"SELECT COUNT(*) FROM calls {where}", params
+        )
+        count_result = await count_cursor.fetchone()
+        total = count_result[0] if count_result else 0
+        
+        # Get page
+        offset = (page - 1) * page_size
+        params_with_limit = params + [page_size, offset]
+        cursor = await self.db.execute(
+            f"SELECT * FROM calls {where} ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            params_with_limit,
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_call(row) for row in rows], total
+
+    async def get_call_by_connection_id(self, connection_id: int) -> Optional[dict]:
+        """Get the most recent call for a Fritz connection_id."""
+        cursor = await self.db.execute(
+            "SELECT * FROM calls WHERE connection_id = ? ORDER BY started_at DESC LIMIT 1",
+            (connection_id,),
+        )
+        row = await cursor.fetchone()
+        return self._row_to_call(row) if row else None
+
     # --- Helpers ---
 
     @staticmethod
@@ -263,4 +422,12 @@ class Database:
         """Convert a database row to a contact dictionary."""
         data = dict(row)
         data["tags"] = json.loads(data.get("tags") or "[]")
+        return data
+
+    @staticmethod
+    def _row_to_call(row) -> dict:
+        """Convert a database row to a call dictionary."""
+        data = dict(row)
+        # Convert is_internal from integer to boolean
+        data["is_internal"] = bool(data.get("is_internal", 0))
         return data

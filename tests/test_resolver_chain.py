@@ -14,7 +14,7 @@ class MockResolver(BaseResolverAdapter):
     """Mock resolver for testing."""
 
     def __init__(self, name: str, result: ResolveResult | None = None):
-        config = AdapterConfig(name=name, enabled=True)
+        config = AdapterConfig(type="test", name=name, enabled=True)
         super().__init__(config)
         self._result = result
         self.resolve_called = False
@@ -94,7 +94,7 @@ class TestResolverChain:
             async def resolve(self, number):
                 raise RuntimeError("Adapter crashed")
 
-        broken = BrokenResolver(AdapterConfig(name="broken", enabled=True))
+        broken = BrokenResolver(AdapterConfig(type="test", name="broken", enabled=True))
         fallback = MockResolver("fallback", ResolveResult(
             number="+491234567890", name="Fallback", source="fallback"
         ))
