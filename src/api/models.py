@@ -23,7 +23,9 @@ class ContactCreate(BaseModel):
 
     number: str = Field(..., min_length=3, description="Phone number")
     name: str = Field(..., min_length=1, description="Contact name")
-    number_type: NumberType = Field(default=NumberType.PRIVATE, description="Type of phone number")
+    number_type: NumberType = Field(
+        default=NumberType.PRIVATE, description="Type of phone number"
+    )
     tags: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
     spam_score: Optional[int] = Field(None, ge=1, le=10)
@@ -128,6 +130,7 @@ class ResolveResponse(BaseModel):
 class AdapterConfigResponse(BaseModel):
     """Response model for adapter configuration."""
 
+    type: str
     name: str
     enabled: bool
     order: int

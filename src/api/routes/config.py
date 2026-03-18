@@ -21,19 +21,19 @@ async def get_config():
     return ConfigResponse(
         input_adapters=[
             AdapterConfigResponse(
-                name=a.name, enabled=a.enabled, order=i, config=a.config
+                type=a.type, name=a.name, enabled=a.enabled, order=i, config=a.config
             )
             for i, a in enumerate(config.input_adapters)
         ],
         resolver_adapters=[
             AdapterConfigResponse(
-                name=a.name, enabled=a.enabled, order=i, config=a.config
+                type=a.type, name=a.name, enabled=a.enabled, order=i, config=a.config
             )
             for i, a in enumerate(config.resolver_adapters)
         ],
         output_adapters=[
             AdapterConfigResponse(
-                name=a.name, enabled=a.enabled, order=i, config=a.config
+                type=a.type, name=a.name, enabled=a.enabled, order=i, config=a.config
             )
             for i, a in enumerate(config.output_adapters)
         ],

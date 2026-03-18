@@ -26,32 +26,49 @@ options:
   fritz_host: "192.168.178.1"
   fritz_port: 1012
   input_adapters:
-    - name: "fritz"
+    - type: "fritz"
+      name: "fritz"
       enabled: true
-    - name: "rest"
+    - type: "rest"
+      name: "rest"
       enabled: true
-    - name: "mqtt"
+    - type: "mqtt"
+      name: "mqtt"
       enabled: false
   resolver_adapters:
-    - name: "json_file"
+    - type: "json_file"
+      name: "json_file"
       enabled: true
-    - name: "sqlite"
+    - type: "sqlite"
+      name: "sqlite"
       enabled: true
-    - name: "tellows"
+    - type: "tellows"
+      name: "tellows"
       enabled: true
-    - name: "dastelefon"
+    - type: "dastelefon"
+      name: "dastelefon"
       enabled: true
-    - name: "klartelbuch"
+    - type: "klartelbuch"
+      name: "klartelbuch"
       enabled: false
   output_adapters:
-    - name: "call_log"
+    - type: "call_log"
+      name: "call_log"
       enabled: true
-    - name: "ha_webhook"
-      enabled: true
-    - name: "mqtt"
+    - type: "webhook"
+      name: "HA Webhook"
       enabled: false
-  webhook_url: ""
-  webhook_token: ""
+    - type: "mqtt"
+      name: "mqtt"
+      enabled: false
+  webhooks:
+    - url: ""
+      token: ""
+      events:
+        - ring
+        - call
+        - connect
+        - disconnect
   mqtt_broker: "homeassistant"
   mqtt_topic_prefix: "phone-logger"
 schema:
@@ -61,15 +78,21 @@ schema:
   fritz_host: str
   fritz_port: port
   input_adapters:
-    - name: str
+    - type: str
+      name: str
       enabled: bool
   resolver_adapters:
-    - name: str
+    - type: str
+      name: str
       enabled: bool
   output_adapters:
-    - name: str
+    - type: str
+      name: str
       enabled: bool
-  webhook_url: url?
-  webhook_token: password?
+  webhooks:
+    - url: url?
+      token: password?
+      events:
+        - str?
   mqtt_broker: str?
   mqtt_topic_prefix: str?
