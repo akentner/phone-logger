@@ -7,7 +7,13 @@ from src.adapters.base import BaseInputAdapter, BaseOutputAdapter
 from src.adapters.resolver.chain import ResolverChain
 from src.config import AdapterConfig, AppConfig
 from src.core import phone_number as pn
-from src.core.event import CallEvent, CallEventType, PipelineResult, ResolveResult
+from src.core.event import (
+    CallDirection,
+    CallEvent,
+    CallEventType,
+    PipelineResult,
+    ResolveResult,
+)
 from src.core.pbx import PbxStateManager
 
 ANONYMOUS = "anonymous"
@@ -45,6 +51,9 @@ class Pipeline:
         self._input_adapters: list[BaseInputAdapter] = []
         self._output_adapters: list[BaseOutputAdapter] = []
         self._rest_input: Optional[RestInputAdapter] = None
+        self._resolve_cache: dict[
+            int, ResolveResult
+        ] = {}  # Cache per line_id for CONNECT/DISCONNECT
 
     @property
     def rest_input(self) -> Optional[RestInputAdapter]:
@@ -128,8 +137,12 @@ class Pipeline:
         1. Normalize phone number to E.164
         2. Enrich with PBX info (line, device, caller/called numbers)
         3. Update PBX line state (FSM transition)
-        4. Resolve phone number (only RING/CALL events)
-        5. Dispatch to output adapters
+        4. Enrich event from LineState (CONNECT/DISCONNECT)
+        5. Resolve phone number (only RING/CALL events) + cache result
+        6. Lookup cached result (CONNECT/DISCONNECT)
+        7. Look up current line state
+        8. Dispatch to output adapters
+        9. Cleanup resolve cache on terminal states
         """
         # 1. Normalize number to E.164
         if event.number:
@@ -153,20 +166,58 @@ class Pipeline:
             event.line_id,
         )
 
-        # 4. Resolve on RING (inbound) and CALL (outbound) events
+        # 4. Enrich event from LineState (for CONNECT/DISCONNECT which lack call details)
+        if event.event_type in (CallEventType.CONNECT, CallEventType.DISCONNECT):
+            line_state = (
+                self.pbx.get_line_state(event.line_id)
+                if event.line_id is not None
+                else None
+            )
+            if line_state:
+                updates = {}
+                # Fill missing number field
+                if not event.number:
+                    if line_state.direction == CallDirection.INBOUND:
+                        updates["number"] = line_state.caller_number or ""
+                    elif line_state.direction == CallDirection.OUTBOUND:
+                        updates["number"] = line_state.called_number or ""
+                # Fill caller/called numbers from LineState
+                if not event.caller_number and line_state.caller_number:
+                    updates["caller_number"] = line_state.caller_number
+                if not event.called_number and line_state.called_number:
+                    updates["called_number"] = line_state.called_number
+                # Fill other fields from LineState
+                if not event.trunk_id and line_state.trunk_id:
+                    updates["trunk_id"] = line_state.trunk_id
+                if not event.device and line_state.device:
+                    updates["device"] = line_state.device
+                # Direction should match LineState
+                if event.direction != line_state.direction and line_state.direction:
+                    updates["direction"] = line_state.direction
+                if updates:
+                    event = event.model_copy(update=updates)
+
+        # 5. Resolve on RING (inbound) and CALL (outbound) events + cache result
         result = None
         if event.event_type in (CallEventType.RING, CallEventType.CALL):
             if event.number == ANONYMOUS:
                 result = ANONYMOUS_RESULT
             elif event.number:
                 result = await self.resolver_chain.resolve(event.number)
+            # Cache the result for later retrieval (CONNECT/DISCONNECT on same line)
+            if result and event.line_id is not None:
+                self._resolve_cache[event.line_id] = result
 
-        # 5. Look up current line state (after FSM update)
+        # 6. Lookup cached result for CONNECT/DISCONNECT events
+        if result is None and event.line_id is not None:
+            result = self._resolve_cache.get(event.line_id)
+
+        # 7. Look up current line state (after FSM update)
         line_state = None
         if event.line_id is not None:
             line_state = self.pbx.get_line_state(event.line_id)
 
-        # 6. Dispatch to output adapters
+        # 8. Dispatch to output adapters
         for adapter in self._output_adapters:
             try:
                 await adapter.handle(event, result, line_state=line_state)
@@ -176,6 +227,15 @@ class Pipeline:
                     adapter.name,
                     event.number,
                 )
+
+        # 9. Cleanup resolve cache on terminal states
+        if line_state and line_state.status.value in (
+            "finished",
+            "missed",
+            "notReached",
+        ):
+            if event.line_id is not None:
+                self._resolve_cache.pop(event.line_id, None)
 
     def _setup_resolver_adapters(self) -> None:
         """Create and register resolver adapters."""
