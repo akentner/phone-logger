@@ -15,7 +15,35 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _matches_filter(filter_value: str, event: CallEvent, line_state: Optional["LineState"]) -> bool:
+def _serialize_line_state(line_state: Optional["LineState"]) -> Optional[dict]:
+    """Serialize a LineState to a JSON-friendly dict, or None if absent."""
+    if line_state is None:
+        return None
+    return {
+        "line_id": line_state.line_id,
+        "status": line_state.status.value,
+        "connection_id": line_state.connection_id,
+        "caller_number": line_state.caller_number,
+        "called_number": line_state.called_number,
+        "direction": line_state.direction.value if line_state.direction else None,
+        "trunk_id": line_state.trunk_id,
+        "device": (
+            {
+                "id": line_state.device.id,
+                "name": line_state.device.name,
+                "type": line_state.device.type,
+            }
+            if line_state.device
+            else None
+        ),
+        "is_internal": line_state.is_internal,
+        "since": line_state.since.isoformat() if line_state.since else None,
+    }
+
+
+def _matches_filter(
+    filter_value: str, event: CallEvent, line_state: Optional["LineState"]
+) -> bool:
     """
     Check whether an event/state matches a single filter entry.
 
@@ -30,7 +58,7 @@ def _matches_filter(filter_value: str, event: CallEvent, line_state: Optional["L
       etc.
     """
     if filter_value.startswith("state:"):
-        state_name = filter_value[len("state:"):]
+        state_name = filter_value[len("state:") :]
         if line_state is None:
             return False
         return line_state.status.value == state_name
@@ -119,11 +147,14 @@ class WebhookOutputAdapter(BaseOutputAdapter):
             "event_type": event.event_type.value,
             "line_id": event.line_id,
             "trunk_id": event.trunk_id,
-            "line_status": line_state.status.value if line_state else None,
-            "is_internal": line_state.is_internal if line_state else False,
             "device": (
-                {"id": event.device.id, "name": event.device.name, "type": event.device.type}
-                if event.device else None
+                {
+                    "id": event.device.id,
+                    "name": event.device.name,
+                    "type": event.device.type,
+                }
+                if event.device
+                else None
             ),
             "timestamp": event.timestamp.isoformat(),
             "source": event.source,
@@ -133,12 +164,15 @@ class WebhookOutputAdapter(BaseOutputAdapter):
             "spam_score": result.spam_score if result else None,
             "is_spam": result.is_spam if result else False,
             "resolver_source": result.source if result else None,
+            "line_state": _serialize_line_state(line_state),
         }
 
         try:
             async with self._session.post(self._url, json=payload) as response:
                 if response.status < 300:
-                    self.logger.debug("Webhook sent successfully for '%s'", event.number)
+                    self.logger.debug(
+                        "Webhook sent successfully for '%s'", event.number
+                    )
                 else:
                     self.logger.warning(
                         "Webhook returned %d for '%s'", response.status, event.number
