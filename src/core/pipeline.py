@@ -116,6 +116,8 @@ class Pipeline:
     async def resolve(self, number: str) -> Optional[ResolveResult]:
         """Resolve a phone number through the chain (for direct API calls)."""
         normalized = self.normalize(number)
+        if normalized == ANONYMOUS:
+            return ANONYMOUS_RESULT
         return await self.resolver_chain.resolve(normalized)
 
     async def _on_event(self, event: CallEvent) -> None:
@@ -133,9 +135,7 @@ class Pipeline:
         if event.number:
             normalized = self.normalize(event.number)
             if normalized != event.number:
-                logger.debug(
-                    "Normalized number: %r -> %r", event.number, normalized
-                )
+                logger.debug("Normalized number: %r -> %r", event.number, normalized)
             event = event.model_copy(update={"number": normalized})
 
         # 2. Enrich with PBX information
@@ -180,7 +180,9 @@ class Pipeline:
     def _setup_resolver_adapters(self) -> None:
         """Create and register resolver adapters."""
         resolver_factories = {
-            "json_file": lambda cfg: JsonFileResolver(cfg, self.config.contacts_json_path),
+            "json_file": lambda cfg: JsonFileResolver(
+                cfg, self.config.contacts_json_path
+            ),
             "sqlite": lambda cfg: SqliteResolver(cfg, self.db),
             "tellows": lambda cfg: TellowsResolver(cfg, self.db),
             "dastelefon": lambda cfg: DasTelefonbuchResolver(cfg, self.db),
@@ -189,7 +191,9 @@ class Pipeline:
 
         for adapter_config in self.config.resolver_adapters:
             if not adapter_config.enabled:
-                logger.debug("Resolver adapter '%s' disabled, skipping", adapter_config.name)
+                logger.debug(
+                    "Resolver adapter '%s' disabled, skipping", adapter_config.name
+                )
                 continue
 
             factory = resolver_factories.get(adapter_config.name)
@@ -203,7 +207,9 @@ class Pipeline:
         """Create input adapters."""
         for adapter_config in self.config.input_adapters:
             if not adapter_config.enabled:
-                logger.debug("Input adapter '%s' disabled, skipping", adapter_config.name)
+                logger.debug(
+                    "Input adapter '%s' disabled, skipping", adapter_config.name
+                )
                 continue
 
             if adapter_config.name == "fritz":
@@ -224,22 +230,28 @@ class Pipeline:
 
     def _setup_output_adapters(self) -> None:
         """Create output adapters.
-        
+
         Some adapter types (e.g. call_log) support only a single instance.
         Other types (e.g. webhook, mqtt) support multiple independent instances.
         """
         call_log_registered = False
-        
+
         for adapter_config in self.config.output_adapters:
             if not adapter_config.enabled:
-                logger.debug("Output adapter '%s' (%s) disabled, skipping", adapter_config.name, adapter_config.type)
+                logger.debug(
+                    "Output adapter '%s' (%s) disabled, skipping",
+                    adapter_config.name,
+                    adapter_config.type,
+                )
                 continue
 
             adapter_type = adapter_config.type
-            
+
             if adapter_type == "call_log":
                 if call_log_registered:
-                    logger.warning("Multiple call_log adapters configured — only first instance used")
+                    logger.warning(
+                        "Multiple call_log adapters configured — only first instance used"
+                    )
                     continue
                 adapter = CallLogOutputAdapter(adapter_config, self.db)
                 call_log_registered = True
@@ -254,4 +266,8 @@ class Pipeline:
                 self._output_adapters.append(adapter)
 
             else:
-                logger.warning("Unknown output adapter type: '%s' (name: '%s')", adapter_type, adapter_config.name)
+                logger.warning(
+                    "Unknown output adapter type: '%s' (name: '%s')",
+                    adapter_type,
+                    adapter_config.name,
+                )
