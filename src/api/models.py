@@ -23,7 +23,9 @@ class ContactCreate(BaseModel):
 
     number: str = Field(..., min_length=3, description="Phone number")
     name: str = Field(..., min_length=1, description="Contact name")
-    number_type: NumberType = Field(default=NumberType.PRIVATE, description="Type of phone number")
+    number_type: NumberType = Field(
+        default=NumberType.PRIVATE, description="Type of phone number"
+    )
     tags: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
     spam_score: Optional[int] = Field(None, ge=1, le=10)
@@ -58,7 +60,7 @@ class ContactResponse(BaseModel):
 
 
 class CallLogEntry(BaseModel):
-    """Response model for a call log entry."""
+    """Response model for a call log entry (raw event)."""
 
     id: int
     number: str
@@ -73,6 +75,52 @@ class CallLogResponse(BaseModel):
     """Paginated call log response."""
 
     items: list[CallLogEntry]
+    total: int
+    page: int
+    page_size: int
+
+
+# --- Call Status and Aggregated Call Models ---
+
+
+class CallStatus(str, Enum):
+    """Status of an aggregated call."""
+
+    RINGING = "ringing"  # Call is ringing/dialing
+    DIALING = "dialing"  # Outbound call being dialed
+    ANSWERED = "answered"  # Call connected
+    MISSED = "missed"  # Inbound call not answered
+    NOT_REACHED = "notReached"  # Outbound call not connected
+
+
+class CallEntry(BaseModel):
+    """Response model for an aggregated call."""
+
+    id: str  # UUIDv7
+    connection_id: int
+    caller_number: str
+    called_number: str
+    direction: str  # 'inbound' or 'outbound'
+    status: CallStatus
+    device: Optional[str] = None
+    device_type: Optional[str] = None
+    msn: Optional[str] = None
+    trunk_id: Optional[str] = None
+    line_id: Optional[int] = None
+    is_internal: bool = False
+    started_at: datetime
+    connected_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
+    resolved_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CallListResponse(BaseModel):
+    """Paginated calls response."""
+
+    items: list[CallEntry]
     total: int
     page: int
     page_size: int
@@ -128,6 +176,7 @@ class ResolveResponse(BaseModel):
 class AdapterConfigResponse(BaseModel):
     """Response model for adapter configuration."""
 
+    type: str
     name: str
     enabled: bool
     order: int
