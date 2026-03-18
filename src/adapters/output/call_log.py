@@ -1,12 +1,15 @@
 """Call log output adapter - stores all call events in SQLite."""
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.adapters.base import BaseOutputAdapter
 from src.config import AdapterConfig
 from src.core.event import CallEvent, ResolveResult
 from src.db.database import Database
+
+if TYPE_CHECKING:
+    from src.core.pbx import LineState
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +25,13 @@ class CallLogOutputAdapter(BaseOutputAdapter):
         super().__init__(config)
         self.db = db
 
-    async def handle(self, event: CallEvent, result: Optional[ResolveResult]) -> None:
+    async def handle(
+        self,
+        event: CallEvent,
+        result: Optional[ResolveResult],
+        *,
+        line_state: Optional["LineState"] = None,
+    ) -> None:
         """Log call event to database."""
         resolved_name = result.name if result else None
         source = result.source if result else None

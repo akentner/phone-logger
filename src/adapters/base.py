@@ -2,10 +2,13 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.config import AdapterConfig
 from src.core.event import CallEvent, ResolveResult
+
+if TYPE_CHECKING:
+    from src.core.pbx import LineState
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +62,14 @@ class BaseOutputAdapter(ABC):
         self.logger = logging.getLogger(f"{__name__}.{self.name}")
 
     @abstractmethod
-    async def handle(self, event: CallEvent, result: Optional[ResolveResult]) -> None:
-        """Handle a processed call event with its resolve result."""
+    async def handle(
+        self,
+        event: CallEvent,
+        result: Optional[ResolveResult],
+        *,
+        line_state: Optional["LineState"] = None,
+    ) -> None:
+        """Handle a processed call event with its resolve result and optional PBX line state."""
 
     async def start(self) -> None:
         """Optional initialization."""

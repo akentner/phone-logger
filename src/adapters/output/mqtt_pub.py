@@ -3,11 +3,14 @@
 import asyncio
 import json
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.adapters.base import BaseOutputAdapter
 from src.config import AdapterConfig
 from src.core.event import CallEvent, ResolveResult
+
+if TYPE_CHECKING:
+    from src.core.pbx import LineState
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +50,13 @@ class MqttPublisherOutputAdapter(BaseOutputAdapter):
         """Cleanup."""
         pass
 
-    async def handle(self, event: CallEvent, result: Optional[ResolveResult]) -> None:
+    async def handle(
+        self,
+        event: CallEvent,
+        result: Optional[ResolveResult],
+        *,
+        line_state: Optional["LineState"] = None,
+    ) -> None:
         """Publish call event to MQTT."""
         payload = {
             "number": event.number,

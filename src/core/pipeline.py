@@ -155,10 +155,15 @@ class Pipeline:
         if event.event_type in (CallEventType.RING, CallEventType.CALL) and event.number:
             result = await self.resolver_chain.resolve(event.number)
 
-        # 5. Dispatch to output adapters
+        # 5. Look up current line state (after FSM update)
+        line_state = None
+        if event.line_id is not None:
+            line_state = self.pbx.get_line_state(event.line_id)
+
+        # 6. Dispatch to output adapters
         for adapter in self._output_adapters:
             try:
-                await adapter.handle(event, result)
+                await adapter.handle(event, result, line_state=line_state)
             except Exception:
                 logger.exception(
                     "Output adapter '%s' failed for event %s",

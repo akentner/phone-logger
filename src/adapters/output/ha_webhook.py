@@ -1,7 +1,7 @@
 """Home Assistant webhook output adapter - sends events to HA."""
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import aiohttp
 
@@ -9,21 +9,62 @@ from src.adapters.base import BaseOutputAdapter
 from src.config import AdapterConfig
 from src.core.event import CallEvent, ResolveResult
 
+if TYPE_CHECKING:
+    from src.core.pbx import LineState
+
 logger = logging.getLogger(__name__)
+
+
+def _matches_filter(filter_value: str, event: CallEvent, line_state: Optional["LineState"]) -> bool:
+    """
+    Check whether an event/state matches a single filter entry.
+
+    Filter format:
+      "ring"           → matches CallEventType.ring
+      "call"           → matches CallEventType.call
+      "connect"        → matches CallEventType.connect
+      "disconnect"     → matches CallEventType.disconnect
+      "state:talking"  → matches LineStatus.talking on the associated line
+      "state:missed"   → matches LineStatus.missed
+      "state:finished" → matches LineStatus.finished
+      etc.
+    """
+    if filter_value.startswith("state:"):
+        state_name = filter_value[len("state:"):]
+        if line_state is None:
+            return False
+        return line_state.status.value == state_name
+    else:
+        return event.event_type.value == filter_value
 
 
 class HaWebhookOutputAdapter(BaseOutputAdapter):
     """
     Output adapter that sends call events to Home Assistant via webhook.
 
-    Sends a POST request with call event data to the configured HA webhook URL.
+    Sends a POST request with call event data to the configured webhook URL.
+
+    The ``events`` config list accepts:
+    - Raw event types: ``ring``, ``call``, ``connect``, ``disconnect``
+    - FSM line states with ``state:`` prefix: ``state:talking``, ``state:missed``,
+      ``state:finished``, ``state:notReached``, ``state:idle``
+
+    Example config::
+
+        events:
+          - ring
+          - state:talking
+          - state:missed
+          - state:finished
     """
 
     def __init__(self, config: AdapterConfig) -> None:
         super().__init__(config)
         self._url = config.config.get("url", "")
         self._token = config.config.get("token", "")
-        self._events = config.config.get("events", ["ring", "call", "connect", "disconnect"])
+        self._events: list[str] = config.config.get(
+            "events", ["ring", "call", "connect", "disconnect"]
+        )
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def start(self) -> None:
@@ -43,17 +84,25 @@ class HaWebhookOutputAdapter(BaseOutputAdapter):
             await self._session.close()
             self._session = None
 
-    async def handle(self, event: CallEvent, result: Optional[ResolveResult]) -> None:
-        """Send call event to Home Assistant webhook."""
+    async def handle(
+        self,
+        event: CallEvent,
+        result: Optional[ResolveResult],
+        *,
+        line_state: Optional["LineState"] = None,
+    ) -> None:
+        """Send call event to webhook if it matches the configured event filter."""
         if not self._url:
             self.logger.debug("No webhook URL configured, skipping")
             return
 
-        # Check if this event type should be sent
-        if event.event_type.value not in self._events:
+        # Check if any configured filter matches
+        matched = any(_matches_filter(f, event, line_state) for f in self._events)
+        if not matched:
             self.logger.debug(
-                "Event type '%s' not in configured events, skipping",
+                "Event '%s' / state '%s' not in configured filters, skipping",
                 event.event_type.value,
+                line_state.status.value if line_state else "n/a",
             )
             return
 
@@ -63,8 +112,18 @@ class HaWebhookOutputAdapter(BaseOutputAdapter):
 
         payload = {
             "number": event.number,
+            "caller_number": event.caller_number,
+            "called_number": event.called_number,
             "direction": event.direction.value,
             "event_type": event.event_type.value,
+            "line_id": event.line_id,
+            "trunk_id": event.trunk_id,
+            "line_status": line_state.status.value if line_state else None,
+            "is_internal": line_state.is_internal if line_state else False,
+            "device": (
+                {"id": event.device.id, "name": event.device.name, "type": event.device.type}
+                if event.device else None
+            ),
             "timestamp": event.timestamp.isoformat(),
             "source": event.source,
             "resolved": result is not None,
