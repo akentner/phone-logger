@@ -8,6 +8,7 @@ from src.adapters.resolver.chain import ResolverChain
 from src.config import AdapterConfig, AppConfig
 from src.core import phone_number as pn
 from src.core.event import CallEvent, CallEventType, PipelineResult, ResolveResult
+from src.core.pbx import PbxStateManager
 from src.db.database import Database
 
 # Import all adapter implementations
@@ -37,6 +38,7 @@ class Pipeline:
         self.config = config
         self.db = db
         self.resolver_chain = ResolverChain()
+        self.pbx = PbxStateManager(config.pbx, config.phone)
         self._input_adapters: list[BaseInputAdapter] = []
         self._output_adapters: list[BaseOutputAdapter] = []
         self._rest_input: Optional[RestInputAdapter] = None
@@ -117,10 +119,14 @@ class Pipeline:
         """
         Handle an incoming call event.
 
-        This is the central event handler called by all input adapters.
-        Normalizes the phone number to E.164 before passing it downstream.
+        Processing order:
+        1. Normalize phone number to E.164
+        2. Enrich with PBX info (line, device, caller/called numbers)
+        3. Update PBX line state (FSM transition)
+        4. Resolve phone number (only RING/CALL events)
+        5. Dispatch to output adapters
         """
-        # Normalize number to E.164
+        # 1. Normalize number to E.164
         if event.number:
             normalized = self.normalize(event.number)
             if normalized != event.number:
@@ -129,20 +135,27 @@ class Pipeline:
                 )
             event = event.model_copy(update={"number": normalized})
 
+        # 2. Enrich with PBX information
+        event = self.pbx.enrich_event(event)
+
+        # 3. Update PBX line state
+        self.pbx.update_state(event)
+
         logger.info(
-            "Event received: %s %s %s (source: %s)",
+            "Event received: %s %s %s (source: %s, line: %s)",
             event.direction.value,
             event.event_type.value,
             event.number,
             event.source,
+            event.line_id,
         )
 
-        # Only resolve on RING (inbound) and CALL (outbound) events
+        # 4. Resolve on RING (inbound) and CALL (outbound) events
         result = None
         if event.event_type in (CallEventType.RING, CallEventType.CALL) and event.number:
             result = await self.resolver_chain.resolve(event.number)
 
-        # Send to all output adapters
+        # 5. Dispatch to output adapters
         for adapter in self._output_adapters:
             try:
                 await adapter.handle(event, result)

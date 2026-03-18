@@ -140,3 +140,65 @@ class ConfigResponse(BaseModel):
     input_adapters: list[AdapterConfigResponse]
     resolver_adapters: list[AdapterConfigResponse]
     output_adapters: list[AdapterConfigResponse]
+
+
+# --- PBX Models ---
+
+
+class DeviceResponse(BaseModel):
+    """Response model for a PBX device."""
+
+    id: str
+    extension: str
+    name: str
+    type: str
+
+
+class DeviceInfoResponse(BaseModel):
+    """Lightweight device info within a line state."""
+
+    id: str
+    extension: str
+    name: str
+    type: str
+
+
+class LineStatusResponse(BaseModel):
+    """Response model for a PBX line state."""
+
+    line_id: int
+    status: str
+    connection_id: Optional[str] = None
+    caller_number: Optional[str] = None
+    called_number: Optional[str] = None
+    direction: Optional[str] = None
+    trunk_id: Optional[str] = None
+    device: Optional[DeviceInfoResponse] = None
+    is_internal: bool = False
+    since: Optional[datetime] = None
+
+
+class TrunkStatusResponse(BaseModel):
+    """Response model for a PBX trunk."""
+
+    id: str
+    type: str
+    label: str
+    busy: bool
+
+
+class MsnResponse(BaseModel):
+    """Response model for a configured MSN."""
+
+    number: str
+    e164: str
+    label: str
+
+
+class PbxStatusResponse(BaseModel):
+    """Full PBX status snapshot."""
+
+    lines: list[LineStatusResponse]
+    trunks: list[TrunkStatusResponse]
+    msns: list[MsnResponse]
+    devices: list[DeviceResponse]

@@ -57,6 +57,39 @@ TRANSLATIONS: dict[str, dict[str, Any]] = {
             "edit_contact": "Kontakt bearbeiten",
             "delete_confirm": "Kontakt wirklich löschen?",
         },
+        # PBX device types
+        "device_type": {
+            "dect": "DECT",
+            "voip": "VoIP",
+            "analog": "Analog",
+            "fax": "Fax",
+            "voicebox": "Anrufbeantworter",
+        },
+        # PBX trunk types
+        "trunk_type": {
+            "sip": "SIP",
+            "isdn": "ISDN",
+            "analog": "Analog",
+        },
+        # PBX line states
+        "line_status": {
+            "idle": "Frei",
+            "ring": "Klingelt",
+            "call": "Wählt",
+            "talking": "Gespräch",
+            "finished": "Beendet",
+            "missed": "Verpasst",
+            "notReached": "Nicht erreicht",
+        },
+        # PBX UI labels
+        "pbx": {
+            "lines": "Leitungen",
+            "trunks": "Amtsleitungen",
+            "msns": "Rufnummern",
+            "devices": "Endgeräte",
+            "status": "Status",
+            "internal_call": "Interner Anruf",
+        },
     },
     "en": {
         # Number types
@@ -107,6 +140,39 @@ TRANSLATIONS: dict[str, dict[str, Any]] = {
             "new_contact": "New Contact",
             "edit_contact": "Edit Contact",
             "delete_confirm": "Really delete this contact?",
+        },
+        # PBX device types
+        "device_type": {
+            "dect": "DECT",
+            "voip": "VoIP",
+            "analog": "Analog",
+            "fax": "Fax",
+            "voicebox": "Voicebox",
+        },
+        # PBX trunk types
+        "trunk_type": {
+            "sip": "SIP",
+            "isdn": "ISDN",
+            "analog": "Analog",
+        },
+        # PBX line states
+        "line_status": {
+            "idle": "Idle",
+            "ring": "Ringing",
+            "call": "Dialing",
+            "talking": "Talking",
+            "finished": "Finished",
+            "missed": "Missed",
+            "notReached": "Not Reached",
+        },
+        # PBX UI labels
+        "pbx": {
+            "lines": "Lines",
+            "trunks": "Trunks",
+            "msns": "Numbers",
+            "devices": "Devices",
+            "status": "Status",
+            "internal_call": "Internal Call",
         },
     },
 }

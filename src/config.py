@@ -1,6 +1,7 @@
 """Configuration management for phone-logger."""
 
 import logging
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 
@@ -32,6 +33,66 @@ class PhoneConfig(BaseModel):
     Required to expand short local numbers that arrive without area code."""
 
 
+# --- PBX Configuration Models ---
+
+
+class TrunkType(str, Enum):
+    """Connection type of a PBX trunk."""
+
+    SIP = "sip"
+    ISDN = "isdn"
+    ANALOG = "analog"
+
+
+class DeviceType(str, Enum):
+    """Type of a PBX device."""
+
+    DECT = "dect"
+    VOIP = "voip"
+    ANALOG = "analog"
+    FAX = "fax"
+    VOICEBOX = "voicebox"
+
+
+class LineConfig(BaseModel):
+    """Configuration for a PBX line (concurrent call slot)."""
+
+    id: int
+
+
+class TrunkConfig(BaseModel):
+    """Configuration for a PBX trunk (external connection)."""
+
+    id: str  # "SIP0", "ISDN0", etc.
+    type: TrunkType = TrunkType.SIP
+    label: str = ""
+
+
+class MsnConfig(BaseModel):
+    """Configuration for an MSN (subscriber number without area code)."""
+
+    number: str  # e.g. "990133" — resolved to E.164 via PhoneConfig at runtime
+    label: str = ""
+
+
+class DeviceConfig(BaseModel):
+    """Configuration for a PBX device (phone, fax, etc.)."""
+
+    id: str
+    extension: str  # internal extension number
+    name: str
+    type: DeviceType = DeviceType.VOIP
+
+
+class PbxConfig(BaseModel):
+    """PBX infrastructure configuration."""
+
+    lines: list[LineConfig] = Field(default_factory=list)
+    trunks: list[TrunkConfig] = Field(default_factory=list)
+    msns: list[MsnConfig] = Field(default_factory=list)
+    devices: list[DeviceConfig] = Field(default_factory=list)
+
+
 class AppConfig(BaseModel):
     """Main application configuration."""
 
@@ -40,6 +101,7 @@ class AppConfig(BaseModel):
     log_level: str = "INFO"
 
     phone: PhoneConfig = Field(default_factory=PhoneConfig)
+    pbx: PbxConfig = Field(default_factory=PbxConfig)
 
     input_adapters: list[AdapterConfig] = Field(default_factory=lambda: [
         AdapterConfig(name="fritz", enabled=True, config={"host": "192.168.178.1", "port": 1012}),

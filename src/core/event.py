@@ -31,10 +31,19 @@ class NumberType(str, Enum):
     MOBILE = "mobile"
 
 
+class DeviceInfo(BaseModel):
+    """Lightweight device information attached to call events."""
+
+    id: str
+    extension: str
+    name: str
+    type: str  # DeviceType value as string
+
+
 class CallEvent(BaseModel):
     """Normalized call event from any input adapter."""
 
-    number: str = Field(..., description="Phone number (normalized)")
+    number: str = Field(..., description="Phone number of the remote party (normalized E.164)")
     direction: CallDirection
     event_type: CallEventType
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -42,6 +51,15 @@ class CallEvent(BaseModel):
     connection_id: Optional[str] = Field(None, description="Fritz!Box connection ID for correlating events")
     extension: Optional[str] = Field(None, description="Internal extension number")
     raw_number: Optional[str] = Field(None, description="Original number before normalization")
+
+    # Semantic direction fields
+    caller_number: Optional[str] = Field(None, description="E.164 number of the caller")
+    called_number: Optional[str] = Field(None, description="E.164 number of the called party")
+
+    # PBX enrichment fields (populated by PbxStateManager)
+    line_id: Optional[int] = Field(None, description="PBX line index (from connection_id)")
+    trunk_id: Optional[str] = Field(None, description="Trunk ID as reported by input adapter (e.g. 'SIP0')")
+    device: Optional[DeviceInfo] = Field(None, description="Matched PBX device (None if no match)")
 
 
 class ResolveResult(BaseModel):

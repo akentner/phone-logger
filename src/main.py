@@ -8,7 +8,7 @@ import sys
 import uvicorn
 
 from src.api.app import create_app
-from src.api.routes import resolve, contacts, calls, cache, config as config_routes, i18n
+from src.api.routes import resolve, contacts, calls, cache, config as config_routes, i18n, pbx
 from src.config import AppConfig, load_config
 from src.core.pipeline import Pipeline
 from src.db.database import Database
@@ -82,6 +82,7 @@ def create_application():
     app.include_router(cache.router)
     app.include_router(config_routes.router)
     app.include_router(i18n.router)
+    app.include_router(pbx.router)
 
     # Register GUI routes
     app.include_router(gui_router)

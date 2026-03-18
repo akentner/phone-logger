@@ -142,17 +142,26 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
         number = ""
         direction = CallDirection.INBOUND
         extension = None
+        trunk_id = None
+        caller_number = None
+        called_number = None
 
         if event_type == CallEventType.RING:
             # RING: date;RING;conn_id;caller_number;called_number;SIP
-            number = parts[3].strip() if len(parts) > 3 else ""
-            extension = parts[4].strip() if len(parts) > 4 else None
+            caller_number = parts[3].strip() if len(parts) > 3 else ""
+            called_number = parts[4].strip() if len(parts) > 4 else None
+            trunk_id = parts[5].strip() if len(parts) > 5 else None
+            number = caller_number  # remote party
+            extension = called_number  # local MSN (used for device/MSN lookup)
             direction = CallDirection.INBOUND
 
         elif event_type == CallEventType.CALL:
             # CALL: date;CALL;conn_id;extension;called_number;caller_number;SIP
             extension = parts[3].strip() if len(parts) > 3 else None
-            number = parts[4].strip() if len(parts) > 4 else ""
+            called_number = parts[4].strip() if len(parts) > 4 else ""
+            caller_number = parts[5].strip() if len(parts) > 5 else None
+            trunk_id = parts[6].strip() if len(parts) > 6 else None
+            number = called_number  # remote party
             direction = CallDirection.OUTBOUND
 
         elif event_type == CallEventType.CONNECT:
@@ -177,4 +186,7 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
             connection_id=connection_id,
             extension=extension,
             raw_number=number,
+            caller_number=caller_number or None,
+            called_number=called_number or None,
+            trunk_id=trunk_id,
         )
