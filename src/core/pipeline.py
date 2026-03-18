@@ -21,7 +21,7 @@ from src.adapters.resolver.tellows import TellowsResolver
 from src.adapters.resolver.dastelefon import DasTelefonbuchResolver
 from src.adapters.resolver.klartelbuch import KlarTelefonbuchResolver
 from src.adapters.output.call_log import CallLogOutputAdapter
-from src.adapters.output.ha_webhook import HaWebhookOutputAdapter
+from src.adapters.output.webhook import WebhookOutputAdapter
 from src.adapters.output.mqtt_pub import MqttPublisherOutputAdapter
 
 logger = logging.getLogger(__name__)
@@ -130,9 +130,7 @@ class Pipeline:
         if event.number:
             normalized = self.normalize(event.number)
             if normalized != event.number:
-                logger.debug(
-                    "Normalized number: %r -> %r", event.number, normalized
-                )
+                logger.debug("Normalized number: %r -> %r", event.number, normalized)
             event = event.model_copy(update={"number": normalized})
 
         # 2. Enrich with PBX information
@@ -152,7 +150,10 @@ class Pipeline:
 
         # 4. Resolve on RING (inbound) and CALL (outbound) events
         result = None
-        if event.event_type in (CallEventType.RING, CallEventType.CALL) and event.number:
+        if (
+            event.event_type in (CallEventType.RING, CallEventType.CALL)
+            and event.number
+        ):
             result = await self.resolver_chain.resolve(event.number)
 
         # 5. Look up current line state (after FSM update)
@@ -174,7 +175,9 @@ class Pipeline:
     def _setup_resolver_adapters(self) -> None:
         """Create and register resolver adapters."""
         resolver_factories = {
-            "json_file": lambda cfg: JsonFileResolver(cfg, self.config.contacts_json_path),
+            "json_file": lambda cfg: JsonFileResolver(
+                cfg, self.config.contacts_json_path
+            ),
             "sqlite": lambda cfg: SqliteResolver(cfg, self.db),
             "tellows": lambda cfg: TellowsResolver(cfg, self.db),
             "dastelefon": lambda cfg: DasTelefonbuchResolver(cfg, self.db),
@@ -183,7 +186,9 @@ class Pipeline:
 
         for adapter_config in self.config.resolver_adapters:
             if not adapter_config.enabled:
-                logger.debug("Resolver adapter '%s' disabled, skipping", adapter_config.name)
+                logger.debug(
+                    "Resolver adapter '%s' disabled, skipping", adapter_config.name
+                )
                 continue
 
             factory = resolver_factories.get(adapter_config.name)
@@ -197,7 +202,9 @@ class Pipeline:
         """Create input adapters."""
         for adapter_config in self.config.input_adapters:
             if not adapter_config.enabled:
-                logger.debug("Input adapter '%s' disabled, skipping", adapter_config.name)
+                logger.debug(
+                    "Input adapter '%s' disabled, skipping", adapter_config.name
+                )
                 continue
 
             if adapter_config.name == "fritz":
@@ -217,23 +224,45 @@ class Pipeline:
                 logger.warning("Unknown input adapter: '%s'", adapter_config.name)
 
     def _setup_output_adapters(self) -> None:
-        """Create output adapters."""
+        """Create output adapters.
+
+        Some adapter types (e.g. call_log) support only a single instance.
+        Other types (e.g. webhook, mqtt) support multiple independent instances.
+        """
+        call_log_registered = False
+
         for adapter_config in self.config.output_adapters:
             if not adapter_config.enabled:
-                logger.debug("Output adapter '%s' disabled, skipping", adapter_config.name)
+                logger.debug(
+                    "Output adapter '%s' (%s) disabled, skipping",
+                    adapter_config.name,
+                    adapter_config.type,
+                )
                 continue
 
-            if adapter_config.name == "call_log":
+            adapter_type = adapter_config.type
+
+            if adapter_type == "call_log":
+                if call_log_registered:
+                    logger.warning(
+                        "Multiple call_log adapters configured — only first instance used"
+                    )
+                    continue
                 adapter = CallLogOutputAdapter(adapter_config, self.db)
+                call_log_registered = True
                 self._output_adapters.append(adapter)
 
-            elif adapter_config.name == "ha_webhook":
-                adapter = HaWebhookOutputAdapter(adapter_config)
+            elif adapter_type == "webhook":
+                adapter = WebhookOutputAdapter(adapter_config)
                 self._output_adapters.append(adapter)
 
-            elif adapter_config.name == "mqtt":
+            elif adapter_type == "mqtt":
                 adapter = MqttPublisherOutputAdapter(adapter_config)
                 self._output_adapters.append(adapter)
 
             else:
-                logger.warning("Unknown output adapter: '%s'", adapter_config.name)
+                logger.warning(
+                    "Unknown output adapter type: '%s' (name: '%s')",
+                    adapter_type,
+                    adapter_config.name,
+                )

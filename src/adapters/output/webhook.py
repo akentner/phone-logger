@@ -1,4 +1,4 @@
-"""Home Assistant webhook output adapter - sends events to HA."""
+"""Webhook output adapter - sends events via HTTP POST to configured URLs."""
 
 import logging
 from typing import TYPE_CHECKING, Optional
@@ -38,11 +38,12 @@ def _matches_filter(filter_value: str, event: CallEvent, line_state: Optional["L
         return event.event_type.value == filter_value
 
 
-class HaWebhookOutputAdapter(BaseOutputAdapter):
+class WebhookOutputAdapter(BaseOutputAdapter):
     """
-    Output adapter that sends call events to Home Assistant via webhook.
+    Output adapter that sends call events via HTTP POST to a webhook URL.
 
     Sends a POST request with call event data to the configured webhook URL.
+    Supports multiple independent webhook instances, each with its own URL and event filters.
 
     The ``events`` config list accepts:
     - Raw event types: ``ring``, ``call``, ``connect``, ``disconnect``
@@ -76,7 +77,7 @@ class HaWebhookOutputAdapter(BaseOutputAdapter):
             headers=headers,
             timeout=aiohttp.ClientTimeout(total=10),
         )
-        self.logger.info("HA Webhook adapter started (URL: %s)", self._url)
+        self.logger.info("Webhook adapter started (URL: %s)", self._url)
 
     async def stop(self) -> None:
         """Close HTTP session."""
