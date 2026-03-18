@@ -8,13 +8,15 @@ from bs4 import BeautifulSoup
 
 from src.adapters.base import BaseResolverAdapter
 from src.config import AdapterConfig
-from src.core import phone_number as pn
 from src.core.event import ResolveResult
 from src.db.database import Database
 
 logger = logging.getLogger(__name__)
 
 TELLOWS_URL = "https://www.tellows.de/num/{number}"
+
+# Tellows expects E.164 with + URL-encoded as %2B
+# e.g. https://www.tellows.de/num/%2B496181990134
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -25,7 +27,7 @@ class TellowsResolver(BaseResolverAdapter):
     """
     Resolves phone numbers via tellows.de web scraping.
 
-    Accepts E.164 input (+49...). Converts to national format for the URL.
+    Accepts E.164 input (+49...). Uses E.164 directly in the URL (+ encoded as %2B).
     Results are cached in SQLite with a configurable TTL.
 
     Debug logging (log_level=DEBUG) shows:
@@ -84,11 +86,11 @@ class TellowsResolver(BaseResolverAdapter):
             self.logger.error("HTTP session not initialized — was start() called?")
             return None
 
-        # Convert E.164 to national format for the URL
-        national = pn.to_scrape_format(number)
-        url = TELLOWS_URL.format(number=national)
+        # Tellows expects E.164 with + URL-encoded as %2B
+        from urllib.parse import quote
+        url = TELLOWS_URL.format(number=quote(number, safe=""))
 
-        self.logger.debug("GET %s  (number=%r national=%r)", url, number, national)
+        self.logger.debug("GET %s  (number=%r)", url, number)
 
         try:
             async with self._session.get(url) as response:
