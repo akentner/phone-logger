@@ -4,6 +4,7 @@ import asyncio
 import logging
 from datetime import datetime
 from enum import Enum
+from collections.abc import Awaitable, Callable
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -141,9 +142,15 @@ class PbxStateManager:
     Line state is kept in RAM only (no DB persistence).
     """
 
-    def __init__(self, config: PbxConfig, phone_config: PhoneConfig) -> None:
+    def __init__(
+        self,
+        config: PbxConfig,
+        phone_config: PhoneConfig,
+        on_state_change: Optional[Callable[[int, "LineState"], Awaitable[None]]] = None,
+    ) -> None:
         self._config = config
         self._phone_config = phone_config
+        self._on_state_change = on_state_change
 
         # Build lookup structures
         self._devices_by_ext: dict[str, DeviceConfig] = {
@@ -335,6 +342,16 @@ class PbxStateManager:
             self._clear_line_state(line_id)
             self._reset_tasks.pop(line_id, None)
             logger.debug("Line %d auto-reset to idle", line_id)
+            # Notify callback about the idle transition
+            if self._on_state_change:
+                idle_state = self._states.get(line_id)
+                if idle_state:
+                    try:
+                        await self._on_state_change(line_id, idle_state)
+                    except Exception:
+                        logger.exception(
+                            "on_state_change callback failed for line %d", line_id
+                        )
 
         try:
             loop = asyncio.get_running_loop()
@@ -342,7 +359,9 @@ class PbxStateManager:
         except RuntimeError:
             # No running event loop (e.g. in tests or sync context).
             # Terminal state remains visible until next event triggers a reset.
-            logger.debug("Line %d in terminal state (no event loop for auto-reset)", line_id)
+            logger.debug(
+                "Line %d in terminal state (no event loop for auto-reset)", line_id
+            )
 
     def _cancel_reset(self, line_id: int) -> None:
         """Cancel a pending auto-reset task."""

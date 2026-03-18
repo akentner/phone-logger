@@ -14,7 +14,7 @@ from src.core.event import (
     PipelineResult,
     ResolveResult,
 )
-from src.core.pbx import PbxStateManager
+from src.core.pbx import LineState, PbxStateManager
 
 ANONYMOUS = "anonymous"
 ANONYMOUS_RESULT = ResolveResult(name="Anonym", number=ANONYMOUS, source="system")
@@ -47,7 +47,9 @@ class Pipeline:
         self.config = config
         self.db = db
         self.resolver_chain = ResolverChain()
-        self.pbx = PbxStateManager(config.pbx, config.phone)
+        self.pbx = PbxStateManager(
+            config.pbx, config.phone, on_state_change=self._on_line_idle
+        )
         self._input_adapters: list[BaseInputAdapter] = []
         self._output_adapters: list[BaseOutputAdapter] = []
         self._rest_input: Optional[RestInputAdapter] = None
@@ -236,6 +238,36 @@ class Pipeline:
         ):
             if event.line_id is not None:
                 self._resolve_cache.pop(event.line_id, None)
+
+    async def _on_line_idle(self, line_id: int, idle_state: LineState) -> None:
+        """Callback from PBX auto-reset: notify output adapters of the idle transition.
+
+        This fires ~1s after a terminal state (finished/missed/notReached)
+        so that webhook/MQTT subscribers learn the line is free again.
+        """
+        logger.debug(
+            "Line %d idle notification → dispatching to output adapters", line_id
+        )
+        for adapter in self._output_adapters:
+            try:
+                await adapter.handle(
+                    CallEvent(
+                        number="",
+                        direction=CallDirection.INBOUND,
+                        event_type=CallEventType.DISCONNECT,
+                        source="pbx",
+                        connection_id=None,
+                        line_id=line_id,
+                    ),
+                    None,
+                    line_state=idle_state,
+                )
+            except Exception:
+                logger.exception(
+                    "Output adapter '%s' failed for idle notification on line %d",
+                    adapter.name,
+                    line_id,
+                )
 
     def _setup_resolver_adapters(self) -> None:
         """Create and register resolver adapters."""
