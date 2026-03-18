@@ -118,17 +118,22 @@ class TellowsResolver(BaseResolverAdapter):
         soup = BeautifulSoup(html, "lxml")
 
         # --- Spam score ---
+        # Selector: #tellowsscore > div > a > img.scoreimage
+        # Alt attribute format: "tellows Bewertung für 06181990133 : Score 5"
         spam_score: Optional[int] = None
-        score_tag = soup.select_one("div.score_result span.scoreresult")
-        if score_tag:
-            raw = score_tag.get_text(strip=True)
-            self.logger.debug("Selector 'div.score_result span.scoreresult' -> %r", raw)
-            try:
-                spam_score = int(raw)
-            except (ValueError, TypeError):
-                self.logger.debug("Could not parse spam score from %r", raw)
+        score_img = soup.select_one("#tellowsscore > div > a > img.scoreimage")
+        if score_img:
+            alt = str(score_img.get("alt", ""))
+            self.logger.debug("Selector '#tellowsscore > div > a > img.scoreimage' -> alt=%r", alt)
+            # Extract score from "... : Score 5"
+            if ": Score " in alt:
+                try:
+                    spam_score = int(alt.split(": Score ")[-1].strip())
+                    self.logger.debug("Extracted spam_score: %d", spam_score)
+                except (ValueError, TypeError):
+                    self.logger.debug("Could not parse score from alt %r", alt)
         else:
-            self.logger.debug("Selector 'div.score_result span.scoreresult' -> no match")
+            self.logger.debug("Selector '#tellowsscore > div > a > img.scoreimage' -> no match")
 
         # --- Caller name ---
         name: Optional[str] = None
