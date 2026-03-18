@@ -6,7 +6,7 @@ from typing import Optional
 import aiohttp
 
 from src.adapters.base import BaseOutputAdapter
-from src.config import AdapterConfig, WebhookConfig
+from src.config import AdapterConfig
 from src.core.event import CallEvent, ResolveResult
 
 logger = logging.getLogger(__name__)
@@ -19,21 +19,23 @@ class HaWebhookOutputAdapter(BaseOutputAdapter):
     Sends a POST request with call event data to the configured HA webhook URL.
     """
 
-    def __init__(self, config: AdapterConfig, webhook_config: WebhookConfig) -> None:
+    def __init__(self, config: AdapterConfig) -> None:
         super().__init__(config)
-        self.webhook_config = webhook_config
+        self._url = config.config.get("url", "")
+        self._token = config.config.get("token", "")
+        self._events = config.config.get("events", ["ring", "call", "connect", "disconnect"])
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def start(self) -> None:
         """Create HTTP session."""
         headers = {}
-        if self.webhook_config.token:
-            headers["Authorization"] = f"Bearer {self.webhook_config.token}"
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
         self._session = aiohttp.ClientSession(
             headers=headers,
             timeout=aiohttp.ClientTimeout(total=10),
         )
-        self.logger.info("HA Webhook adapter started (URL: %s)", self.webhook_config.url)
+        self.logger.info("HA Webhook adapter started (URL: %s)", self._url)
 
     async def stop(self) -> None:
         """Close HTTP session."""
@@ -43,12 +45,12 @@ class HaWebhookOutputAdapter(BaseOutputAdapter):
 
     async def handle(self, event: CallEvent, result: Optional[ResolveResult]) -> None:
         """Send call event to Home Assistant webhook."""
-        if not self.webhook_config.url:
+        if not self._url:
             self.logger.debug("No webhook URL configured, skipping")
             return
 
         # Check if this event type should be sent
-        if event.event_type.value not in self.webhook_config.events:
+        if event.event_type.value not in self._events:
             self.logger.debug(
                 "Event type '%s' not in configured events, skipping",
                 event.event_type.value,
@@ -74,7 +76,7 @@ class HaWebhookOutputAdapter(BaseOutputAdapter):
         }
 
         try:
-            async with self._session.post(self.webhook_config.url, json=payload) as response:
+            async with self._session.post(self._url, json=payload) as response:
                 if response.status < 300:
                     self.logger.debug("Webhook sent successfully for '%s'", event.number)
                 else:

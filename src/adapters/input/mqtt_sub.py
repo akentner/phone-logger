@@ -6,7 +6,7 @@ import logging
 from typing import Callable, Coroutine, Optional
 
 from src.adapters.base import BaseInputAdapter
-from src.config import AdapterConfig, MqttConfig
+from src.config import AdapterConfig
 from src.core.event import CallDirection, CallEvent, CallEventType
 
 logger = logging.getLogger(__name__)
@@ -24,10 +24,14 @@ class MqttInputAdapter(BaseInputAdapter):
     }
     """
 
-    def __init__(self, config: AdapterConfig, mqtt_config: MqttConfig) -> None:
+    def __init__(self, config: AdapterConfig) -> None:
         super().__init__(config)
-        self.mqtt_config = mqtt_config
-        self.topic = f"{mqtt_config.topic_prefix}/trigger"
+        self._broker = config.config.get("broker", "homeassistant")
+        self._port = config.config.get("port", 1883)
+        self._username = config.config.get("username", "")
+        self._password = config.config.get("password", "")
+        self._topic_prefix = config.config.get("topic_prefix", "phone-logger")
+        self.topic = f"{self._topic_prefix}/trigger"
         self._callback: Optional[Callable[[CallEvent], Coroutine]] = None
         self._task: Optional[asyncio.Task] = None
         self._running = False
@@ -72,10 +76,10 @@ class MqttInputAdapter(BaseInputAdapter):
         import aiomqtt
 
         async with aiomqtt.Client(
-            hostname=self.mqtt_config.broker,
-            port=self.mqtt_config.port,
-            username=self.mqtt_config.username or None,
-            password=self.mqtt_config.password or None,
+            hostname=self._broker,
+            port=self._port,
+            username=self._username or None,
+            password=self._password or None,
         ) as client:
             await client.subscribe(self.topic)
             self.logger.info("Subscribed to MQTT topic: %s", self.topic)

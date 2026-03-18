@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Callable, Coroutine, Optional
 
 from src.adapters.base import BaseInputAdapter
-from src.config import AdapterConfig, FritzConfig
+from src.config import AdapterConfig
 from src.core.event import CallDirection, CallEvent, CallEventType
 
 logger = logging.getLogger(__name__)
@@ -31,10 +31,10 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
     Requires Callmonitor to be enabled on Fritz!Box (dial #96*5*).
     """
 
-    def __init__(self, config: AdapterConfig, fritz_config: FritzConfig) -> None:
+    def __init__(self, config: AdapterConfig) -> None:
         super().__init__(config)
-        self.host = fritz_config.host
-        self.port = fritz_config.port
+        self.host = config.config.get("host", "192.168.178.1")
+        self.port = config.config.get("port", 1012)
         self._callback: Optional[Callable[[CallEvent], Coroutine]] = None
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None

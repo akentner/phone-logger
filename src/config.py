@@ -21,31 +21,6 @@ class AdapterConfig(BaseModel):
     config: dict = Field(default_factory=dict)
 
 
-class FritzConfig(BaseModel):
-    """Fritz!Box connection settings."""
-
-    host: str = "192.168.178.1"
-    port: int = 1012
-
-
-class WebhookConfig(BaseModel):
-    """Home Assistant webhook settings."""
-
-    url: str = ""
-    token: str = ""
-    events: list[str] = Field(default_factory=lambda: ["ring", "call", "connect", "disconnect"])
-
-
-class MqttConfig(BaseModel):
-    """MQTT connection settings."""
-
-    broker: str = "homeassistant"
-    port: int = 1883
-    username: str = ""
-    password: str = ""
-    topic_prefix: str = "phone-logger"
-
-
 class PhoneConfig(BaseModel):
     """Phone number normalization settings."""
 
@@ -65,14 +40,11 @@ class AppConfig(BaseModel):
     log_level: str = "INFO"
 
     phone: PhoneConfig = Field(default_factory=PhoneConfig)
-    fritz: FritzConfig = Field(default_factory=FritzConfig)
-    webhook: WebhookConfig = Field(default_factory=WebhookConfig)
-    mqtt: MqttConfig = Field(default_factory=MqttConfig)
 
     input_adapters: list[AdapterConfig] = Field(default_factory=lambda: [
-        AdapterConfig(name="fritz", enabled=True),
+        AdapterConfig(name="fritz", enabled=True, config={"host": "192.168.178.1", "port": 1012}),
         AdapterConfig(name="rest", enabled=True),
-        AdapterConfig(name="mqtt", enabled=False),
+        AdapterConfig(name="mqtt", enabled=False, config={"broker": "homeassistant", "port": 1883, "topic_prefix": "phone-logger"}),
     ])
 
     resolver_adapters: list[AdapterConfig] = Field(default_factory=lambda: [
@@ -85,8 +57,8 @@ class AppConfig(BaseModel):
 
     output_adapters: list[AdapterConfig] = Field(default_factory=lambda: [
         AdapterConfig(name="call_log", enabled=True),
-        AdapterConfig(name="ha_webhook", enabled=True),
-        AdapterConfig(name="mqtt", enabled=False),
+        AdapterConfig(name="ha_webhook", enabled=True, config={"url": "", "token": "", "events": ["ring", "call", "connect", "disconnect"]}),
+        AdapterConfig(name="mqtt", enabled=False, config={"broker": "homeassistant", "topic_prefix": "phone-logger"}),
     ])
 
     @property

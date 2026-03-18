@@ -183,7 +183,7 @@ class Pipeline:
                 continue
 
             if adapter_config.name == "fritz":
-                adapter = FritzCallmonitorAdapter(adapter_config, self.config.fritz)
+                adapter = FritzCallmonitorAdapter(adapter_config)
                 self._input_adapters.append(adapter)
 
             elif adapter_config.name == "rest":
@@ -192,7 +192,7 @@ class Pipeline:
                 self._input_adapters.append(adapter)
 
             elif adapter_config.name == "mqtt":
-                adapter = MqttInputAdapter(adapter_config, self.config.mqtt)
+                adapter = MqttInputAdapter(adapter_config)
                 self._input_adapters.append(adapter)
 
             else:
@@ -210,11 +210,11 @@ class Pipeline:
                 self._output_adapters.append(adapter)
 
             elif adapter_config.name == "ha_webhook":
-                adapter = HaWebhookOutputAdapter(adapter_config, self.config.webhook)
+                adapter = HaWebhookOutputAdapter(adapter_config)
                 self._output_adapters.append(adapter)
 
             elif adapter_config.name == "mqtt":
-                adapter = MqttPublisherOutputAdapter(adapter_config, self.config.mqtt)
+                adapter = MqttPublisherOutputAdapter(adapter_config)
                 self._output_adapters.append(adapter)
 
             else:

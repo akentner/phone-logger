@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 
 from src.adapters.base import BaseOutputAdapter
-from src.config import AdapterConfig, MqttConfig
+from src.config import AdapterConfig
 from src.core.event import CallEvent, ResolveResult
 
 logger = logging.getLogger(__name__)
@@ -21,17 +21,21 @@ class MqttPublisherOutputAdapter(BaseOutputAdapter):
     - {prefix}/event/{type}   - Filtered by event type
     """
 
-    def __init__(self, config: AdapterConfig, mqtt_config: MqttConfig) -> None:
+    def __init__(self, config: AdapterConfig) -> None:
         super().__init__(config)
-        self.mqtt_config = mqtt_config
+        self._broker = config.config.get("broker", "homeassistant")
+        self._port = config.config.get("port", 1883)
+        self._username = config.config.get("username", "")
+        self._password = config.config.get("password", "")
+        self._topic_prefix = config.config.get("topic_prefix", "phone-logger")
         self._client = None
 
     async def start(self) -> None:
         """Initialize MQTT connection info."""
         self.logger.info(
             "MQTT publisher adapter configured (broker: %s, prefix: %s)",
-            self.mqtt_config.broker,
-            self.mqtt_config.topic_prefix,
+            self._broker,
+            self._topic_prefix,
         )
 
     async def stop(self) -> None:
@@ -54,17 +58,17 @@ class MqttPublisherOutputAdapter(BaseOutputAdapter):
             "resolver_source": result.source if result else None,
         }
 
-        topic_base = self.mqtt_config.topic_prefix
+        topic_base = self._topic_prefix
         message = json.dumps(payload)
 
         try:
             import aiomqtt
 
             async with aiomqtt.Client(
-                hostname=self.mqtt_config.broker,
-                port=self.mqtt_config.port,
-                username=self.mqtt_config.username or None,
-                password=self.mqtt_config.password or None,
+                hostname=self._broker,
+                port=self._port,
+                username=self._username or None,
+                password=self._password or None,
             ) as client:
                 # Publish to general topic
                 await client.publish(f"{topic_base}/event", message)
