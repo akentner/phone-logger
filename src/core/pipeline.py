@@ -9,6 +9,9 @@ from src.config import AdapterConfig, AppConfig
 from src.core import phone_number as pn
 from src.core.event import CallEvent, CallEventType, PipelineResult, ResolveResult
 from src.core.pbx import PbxStateManager
+
+ANONYMOUS = "anonymous"
+ANONYMOUS_RESULT = ResolveResult(name="Anonym", number=ANONYMOUS, source="system")
 from src.db.database import Database
 
 # Import all adapter implementations
@@ -130,7 +133,9 @@ class Pipeline:
         if event.number:
             normalized = self.normalize(event.number)
             if normalized != event.number:
-                logger.debug("Normalized number: %r -> %r", event.number, normalized)
+                logger.debug(
+                    "Normalized number: %r -> %r", event.number, normalized
+                )
             event = event.model_copy(update={"number": normalized})
 
         # 2. Enrich with PBX information
@@ -150,11 +155,11 @@ class Pipeline:
 
         # 4. Resolve on RING (inbound) and CALL (outbound) events
         result = None
-        if (
-            event.event_type in (CallEventType.RING, CallEventType.CALL)
-            and event.number
-        ):
-            result = await self.resolver_chain.resolve(event.number)
+        if event.event_type in (CallEventType.RING, CallEventType.CALL):
+            if event.number == ANONYMOUS:
+                result = ANONYMOUS_RESULT
+            elif event.number:
+                result = await self.resolver_chain.resolve(event.number)
 
         # 5. Look up current line state (after FSM update)
         line_state = None
@@ -175,9 +180,7 @@ class Pipeline:
     def _setup_resolver_adapters(self) -> None:
         """Create and register resolver adapters."""
         resolver_factories = {
-            "json_file": lambda cfg: JsonFileResolver(
-                cfg, self.config.contacts_json_path
-            ),
+            "json_file": lambda cfg: JsonFileResolver(cfg, self.config.contacts_json_path),
             "sqlite": lambda cfg: SqliteResolver(cfg, self.db),
             "tellows": lambda cfg: TellowsResolver(cfg, self.db),
             "dastelefon": lambda cfg: DasTelefonbuchResolver(cfg, self.db),
@@ -186,9 +189,7 @@ class Pipeline:
 
         for adapter_config in self.config.resolver_adapters:
             if not adapter_config.enabled:
-                logger.debug(
-                    "Resolver adapter '%s' disabled, skipping", adapter_config.name
-                )
+                logger.debug("Resolver adapter '%s' disabled, skipping", adapter_config.name)
                 continue
 
             factory = resolver_factories.get(adapter_config.name)
@@ -202,9 +203,7 @@ class Pipeline:
         """Create input adapters."""
         for adapter_config in self.config.input_adapters:
             if not adapter_config.enabled:
-                logger.debug(
-                    "Input adapter '%s' disabled, skipping", adapter_config.name
-                )
+                logger.debug("Input adapter '%s' disabled, skipping", adapter_config.name)
                 continue
 
             if adapter_config.name == "fritz":
@@ -225,28 +224,22 @@ class Pipeline:
 
     def _setup_output_adapters(self) -> None:
         """Create output adapters.
-
+        
         Some adapter types (e.g. call_log) support only a single instance.
         Other types (e.g. webhook, mqtt) support multiple independent instances.
         """
         call_log_registered = False
-
+        
         for adapter_config in self.config.output_adapters:
             if not adapter_config.enabled:
-                logger.debug(
-                    "Output adapter '%s' (%s) disabled, skipping",
-                    adapter_config.name,
-                    adapter_config.type,
-                )
+                logger.debug("Output adapter '%s' (%s) disabled, skipping", adapter_config.name, adapter_config.type)
                 continue
 
             adapter_type = adapter_config.type
-
+            
             if adapter_type == "call_log":
                 if call_log_registered:
-                    logger.warning(
-                        "Multiple call_log adapters configured — only first instance used"
-                    )
+                    logger.warning("Multiple call_log adapters configured — only first instance used")
                     continue
                 adapter = CallLogOutputAdapter(adapter_config, self.db)
                 call_log_registered = True
@@ -261,8 +254,4 @@ class Pipeline:
                 self._output_adapters.append(adapter)
 
             else:
-                logger.warning(
-                    "Unknown output adapter type: '%s' (name: '%s')",
-                    adapter_type,
-                    adapter_config.name,
-                )
+                logger.warning("Unknown output adapter type: '%s' (name: '%s')", adapter_type, adapter_config.name)

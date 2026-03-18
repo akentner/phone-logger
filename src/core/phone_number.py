@@ -47,6 +47,10 @@ def normalize(
     if not number:
         return number
 
+    # Pass through sentinel values unchanged
+    if number == "anonymous":
+        return number
+
     # Strip all formatting: spaces, dashes, slashes, parentheses
     cleaned = re.sub(r"[\s\-\./\(\)]", "", number.strip())
 

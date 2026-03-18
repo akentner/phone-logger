@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 # Example: 15.03.26 10:15:00;RING;0;12;0123456789;987654321;SIP0
 # Events: RING (inbound), CALL (outbound), CONNECT, DISCONNECT
 
+ANONYMOUS = "anonymous"  # Sentinel for withheld/unavailable caller numbers
+
 EVENT_MAP = {
     "RING": CallEventType.RING,
     "CALL": CallEventType.CALL,
@@ -151,7 +153,8 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
             caller_number = parts[3].strip() if len(parts) > 3 else ""
             called_number = parts[4].strip() if len(parts) > 4 else None
             trunk_id = parts[5].strip() if len(parts) > 5 else None
-            number = caller_number  # remote party
+            # Empty caller = withheld/anonymous number
+            number = caller_number if caller_number else ANONYMOUS
             extension = called_number  # local MSN (used for device/MSN lookup)
             direction = CallDirection.INBOUND
 
@@ -161,7 +164,8 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
             called_number = parts[4].strip() if len(parts) > 4 else ""
             caller_number = parts[5].strip() if len(parts) > 5 else None
             trunk_id = parts[6].strip() if len(parts) > 6 else None
-            number = called_number  # remote party
+            # Empty called = anonymous/unavailable target (rare but possible)
+            number = called_number if called_number else ANONYMOUS
             direction = CallDirection.OUTBOUND
 
         elif event_type == CallEventType.CONNECT:
@@ -174,9 +178,6 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
             # No number in disconnect, but we need the connection_id for correlation
             number = ""
 
-        if not number and event_type not in (CallEventType.CONNECT, CallEventType.DISCONNECT):
-            return None
-
         return CallEvent(
             number=number,
             direction=direction,
@@ -185,8 +186,8 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
             source="fritz",
             connection_id=connection_id,
             extension=extension,
-            raw_number=number,
-            caller_number=caller_number or None,
+            raw_number=caller_number if event_type == CallEventType.RING else number,
+            caller_number=caller_number if caller_number else (ANONYMOUS if event_type == CallEventType.RING else None),
             called_number=called_number or None,
             trunk_id=trunk_id,
         )
