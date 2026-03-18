@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title %}Telefonanlage{% endblock %}
+
+{% block content %}
+<!-- Lines Status -->
+<div class="card">
+    <div class="card-header">
+        <h2>Leitungen</h2>
+        <span class="pbx-auto-refresh">
+            <label><input type="checkbox" id="auto-refresh" checked> Auto-Refresh (2s)</label>
+        </span>
+    </div>
+    <div id="lines-container" class="pbx-lines-grid">
+        <div class="pbx-loading">Lade...</div>
+    </div>
+</div>
+
+<!-- Trunks -->
+<div class="card">
+    <div class="card-header">
+        <h2>Amtsleitungen</h2>
+    </div>
+    <div id="trunks-container" class="pbx-trunks-grid">
+        <div class="pbx-loading">Lade...</div>
+    </div>
+</div>
+
+<!-- MSNs & Devices side by side -->
+<div class="pbx-row">
+    <div class="card pbx-half">
+        <div class="card-header">
+            <h2>Rufnummern (MSN)</h2>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>MSN</th>
+                        <th>E.164</th>
+                        <th>Bezeichnung</th>
+                    </tr>
+                </thead>
+                <tbody id="msns-table">
+                    <tr><td colspan="3">Lade...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card pbx-half">
+        <div class="card-header">
+            <h2>Endgeräte</h2>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Durchwahl</th>
+                        <th>Name</th>
+                        <th>Typ</th>
+                    </tr>
+                </thead>
+                <tbody id="devices-table">
+                    <tr><td colspan="3">Lade...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let refreshTimer = null;
+
+    async function loadPbxStatus() {
+        try {
+            await loadTranslations('de');
+            const data = await apiCall('/api/pbx/status');
+            renderLines(data.lines);
+            renderTrunks(data.trunks);
+            renderMsns(data.msns);
+            renderDevices(data.devices);
+        } catch (e) {
+            showAlert('Fehler beim Laden: ' + e.message, 'error');
+        }
+    }
+
+    function lineStatusIcon(status) {
+        const icons = {
+            idle: '\u{1F7E2}',
+            ring: '\u{1F514}',
+            call: '\u{1F4DE}',
+            talking: '\u{1F5E3}',
+            finished: '\u2705',
+            missed: '\u274C',
+            notReached: '\u{1F6AB}',
+        };
+        return icons[status] || '\u2753';
+    }
+
+    function renderLines(lines) {
+        const container = document.getElementById('lines-container');
+        if (!lines || lines.length === 0) {
+            container.innerHTML = '<div class="pbx-empty">Keine Leitungen konfiguriert</div>';
+            return;
+        }
+
+        container.innerHTML = lines.map(line => {
+            const isActive = line.status !== 'idle';
+            const statusLabel = t(`line_status.${line.status}`) || line.status;
+
+            let details = '';
+            if (isActive) {
+                const dir = line.direction === 'inbound' ? '\u2199\uFE0F' : '\u2197\uFE0F';
+                const internal = line.is_internal ? `<span class="pbx-internal-badge">${t('pbx.internal_call')}</span>` : '';
+                const caller = line.caller_number || '-';
+                const called = line.called_number || '-';
+                const device = line.device ? `<div class="pbx-line-device">${line.device.name} (${t(`device_type.${line.device.type}`) || line.device.type})</div>` : '';
+                const trunk = line.trunk_id ? `<div class="pbx-line-trunk">Trunk: ${line.trunk_id}</div>` : '';
+                const since = line.since ? `<div class="pbx-line-since">seit ${formatTime(line.since)}</div>` : '';
+
+                details = `
+                    <div class="pbx-line-details">
+                        <div class="pbx-line-numbers">
+                            ${dir} ${caller} &rarr; ${called} ${internal}
+                        </div>
+                        ${device}${trunk}${since}
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="pbx-line-card pbx-line-${line.status}">
+                    <div class="pbx-line-header">
+                        <span class="pbx-line-id">Line ${line.line_id}</span>
+                        <span class="pbx-line-status pbx-status-${line.status}">
+                            ${lineStatusIcon(line.status)} ${statusLabel}
+                        </span>
+                    </div>
+                    ${details}
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderTrunks(trunks) {
+        const container = document.getElementById('trunks-container');
+        if (!trunks || trunks.length === 0) {
+            container.innerHTML = '<div class="pbx-empty">Keine Amtsleitungen konfiguriert</div>';
+            return;
+        }
+
+        container.innerHTML = trunks.map(trunk => `
+            <div class="pbx-trunk-card ${trunk.busy ? 'pbx-trunk-busy' : 'pbx-trunk-idle'}">
+                <div class="pbx-trunk-indicator ${trunk.busy ? 'pbx-trunk-indicator-busy' : 'pbx-trunk-indicator-idle'}"></div>
+                <div class="pbx-trunk-info">
+                    <strong>${trunk.id}</strong>
+                    <span class="pbx-trunk-label">${trunk.label || t(`trunk_type.${trunk.type}`) || trunk.type}</span>
+                </div>
+                <span class="pbx-trunk-status">${trunk.busy ? 'Belegt' : 'Frei'}</span>
+            </div>
+        `).join('');
+    }
+
+    function renderMsns(msns) {
+        const tbody = document.getElementById('msns-table');
+        if (!msns || msns.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3">Keine MSNs konfiguriert</td></tr>';
+            return;
+        }
+        tbody.innerHTML = msns.map(m => `
+            <tr>
+                <td><strong>${m.number}</strong></td>
+                <td><code>${m.e164}</code></td>
+                <td>${m.label || '-'}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderDevices(devices) {
+        const tbody = document.getElementById('devices-table');
+        if (!devices || devices.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3">Keine Endgeräte konfiguriert</td></tr>';
+            return;
+        }
+        tbody.innerHTML = devices.map(d => `
+            <tr>
+                <td><strong>${d.extension}</strong></td>
+                <td>${d.name}</td>
+                <td><span class="pbx-device-type pbx-device-${d.type}">${t(`device_type.${d.type}`) || d.type}</span></td>
+            </tr>
+        `).join('');
+    }
+
+    function formatTime(isoString) {
+        if (!isoString) return '';
+        const d = new Date(isoString);
+        return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function startAutoRefresh() {
+        stopAutoRefresh();
+        refreshTimer = setInterval(loadPbxStatus, 2000);
+    }
+
+    function stopAutoRefresh() {
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
+    }
+
+    document.getElementById('auto-refresh').addEventListener('change', (e) => {
+        if (e.target.checked) {
+            startAutoRefresh();
+        } else {
+            stopAutoRefresh();
+        }
+    });
+
+    // Initial load and start auto-refresh
+    loadPbxStatus();
+    startAutoRefresh();
+</script>
+{% endblock %}

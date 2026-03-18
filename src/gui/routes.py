@@ -14,8 +14,14 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 @router.get("/")
 async def index(request: Request):
-    """Redirect to contacts page."""
-    return templates.TemplateResponse("contacts.html", {"request": request, "active": "contacts"})
+    """Redirect to PBX page."""
+    return templates.TemplateResponse("pbx.html", {"request": request, "active": "pbx"})
+
+
+@router.get("/pbx")
+async def pbx_page(request: Request):
+    """PBX status page."""
+    return templates.TemplateResponse("pbx.html", {"request": request, "active": "pbx"})
 
 
 @router.get("/contacts")
