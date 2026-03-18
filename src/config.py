@@ -99,6 +99,7 @@ class AppConfig(BaseModel):
     data_path: str = DEFAULT_DATA_PATH
     ingress_port: int = 8080
     log_level: str = "INFO"
+    timezone: str = "Europe/Berlin"
 
     phone: PhoneConfig = Field(default_factory=PhoneConfig)
     pbx: PbxConfig = Field(default_factory=PbxConfig)

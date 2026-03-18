@@ -40,7 +40,7 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
         self._writer: Optional[asyncio.StreamWriter] = None
         self._task: Optional[asyncio.Task] = None
         self._running = False
-        self._reconnect_delay = 5  # seconds
+        self._reconnect_delay = config.config.get("reconnect_delay", 10)
 
     async def start(self, callback: Callable[[CallEvent], Coroutine]) -> None:
         """Start listening for Fritz!Box Callmonitor events."""

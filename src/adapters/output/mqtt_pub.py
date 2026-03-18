@@ -27,7 +27,12 @@ class MqttPublisherOutputAdapter(BaseOutputAdapter):
         self._port = config.config.get("port", 1883)
         self._username = config.config.get("username", "")
         self._password = config.config.get("password", "")
+        self._client_id = config.config.get("client_id", "")
         self._topic_prefix = config.config.get("topic_prefix", "phone-logger")
+        self._qos = config.config.get("qos", 1)
+        self._retain = config.config.get("retain", True)
+        self._keep_alive = config.config.get("keep_alive", 60)
+        self._connect_timeout = config.config.get("connect_timeout", 30)
         self._client = None
 
     async def start(self) -> None:
@@ -64,17 +69,27 @@ class MqttPublisherOutputAdapter(BaseOutputAdapter):
         try:
             import aiomqtt
 
-            async with aiomqtt.Client(
-                hostname=self._broker,
-                port=self._port,
-                username=self._username or None,
-                password=self._password or None,
-            ) as client:
+            client_kwargs = {
+                "hostname": self._broker,
+                "port": self._port,
+                "username": self._username or None,
+                "password": self._password or None,
+                "keepalive": self._keep_alive,
+                "timeout": self._connect_timeout,
+            }
+            if self._client_id:
+                client_kwargs["identifier"] = self._client_id
+
+            async with aiomqtt.Client(**client_kwargs) as client:
                 # Publish to general topic
-                await client.publish(f"{topic_base}/event", message)
+                await client.publish(
+                    f"{topic_base}/event", message,
+                    qos=self._qos, retain=self._retain,
+                )
                 # Publish to event-type-specific topic
                 await client.publish(
-                    f"{topic_base}/event/{event.event_type.value}", message
+                    f"{topic_base}/event/{event.event_type.value}", message,
+                    qos=self._qos, retain=self._retain,
                 )
 
             self.logger.debug("MQTT published for '%s' on %s/event", event.number, topic_base)

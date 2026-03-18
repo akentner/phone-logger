@@ -30,7 +30,12 @@ class MqttInputAdapter(BaseInputAdapter):
         self._port = config.config.get("port", 1883)
         self._username = config.config.get("username", "")
         self._password = config.config.get("password", "")
+        self._client_id = config.config.get("client_id", "")
         self._topic_prefix = config.config.get("topic_prefix", "phone-logger")
+        self._qos = config.config.get("qos", 1)
+        self._keep_alive = config.config.get("keep_alive", 60)
+        self._connect_timeout = config.config.get("connect_timeout", 30)
+        self._reconnect_delay = config.config.get("reconnect_delay", 10)
         self.topic = f"{self._topic_prefix}/trigger"
         self._callback: Optional[Callable[[CallEvent], Coroutine]] = None
         self._task: Optional[asyncio.Task] = None
@@ -69,19 +74,25 @@ class MqttInputAdapter(BaseInputAdapter):
             except Exception:
                 self.logger.exception("MQTT connection error")
                 if self._running:
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(self._reconnect_delay)
 
     async def _subscribe(self) -> None:
         """Subscribe to MQTT topic and process messages."""
         import aiomqtt
 
-        async with aiomqtt.Client(
-            hostname=self._broker,
-            port=self._port,
-            username=self._username or None,
-            password=self._password or None,
-        ) as client:
-            await client.subscribe(self.topic)
+        client_kwargs = {
+            "hostname": self._broker,
+            "port": self._port,
+            "username": self._username or None,
+            "password": self._password or None,
+            "keepalive": self._keep_alive,
+            "timeout": self._connect_timeout,
+        }
+        if self._client_id:
+            client_kwargs["identifier"] = self._client_id
+
+        async with aiomqtt.Client(**client_kwargs) as client:
+            await client.subscribe(self.topic, qos=self._qos)
             self.logger.info("Subscribed to MQTT topic: %s", self.topic)
 
             async for message in client.messages:
