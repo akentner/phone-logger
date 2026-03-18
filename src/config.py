@@ -46,6 +46,17 @@ class MqttConfig(BaseModel):
     topic_prefix: str = "phone-logger"
 
 
+class PhoneConfig(BaseModel):
+    """Phone number normalization settings."""
+
+    country_code: str = "49"
+    """Default country code without leading +/00 (e.g. '49' for Germany)."""
+
+    local_area_code: str = ""
+    """Local area code without leading 0 (e.g. '6181' for Hanau).
+    Required to expand short local numbers that arrive without area code."""
+
+
 class AppConfig(BaseModel):
     """Main application configuration."""
 
@@ -53,6 +64,7 @@ class AppConfig(BaseModel):
     ingress_port: int = 8080
     log_level: str = "INFO"
 
+    phone: PhoneConfig = Field(default_factory=PhoneConfig)
     fritz: FritzConfig = Field(default_factory=FritzConfig)
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)
     mqtt: MqttConfig = Field(default_factory=MqttConfig)

@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 
 from src.adapters.base import BaseResolverAdapter
 from src.config import AdapterConfig
+from src.core import phone_number as pn
 from src.core.event import ResolveResult
 from src.db.database import Database
 
@@ -24,7 +25,14 @@ class TellowsResolver(BaseResolverAdapter):
     """
     Resolves phone numbers via tellows.de web scraping.
 
-    Results are cached in the SQLite database with a configurable TTL.
+    Accepts E.164 input (+49...). Converts to national format for the URL.
+    Results are cached in SQLite with a configurable TTL.
+
+    Debug logging (log_level=DEBUG) shows:
+    - Full request URL
+    - HTTP status code and response size
+    - Which CSS selectors matched / did not match
+    - Extracted field values before returning
     """
 
     def __init__(self, config: AdapterConfig, db: Database) -> None:
@@ -39,6 +47,7 @@ class TellowsResolver(BaseResolverAdapter):
             headers={"User-Agent": USER_AGENT},
             timeout=aiohttp.ClientTimeout(total=15),
         )
+        self.logger.debug("HTTP session created (UA: %s)", USER_AGENT[:40])
 
     async def stop(self) -> None:
         """Close HTTP session."""
@@ -47,11 +56,11 @@ class TellowsResolver(BaseResolverAdapter):
             self._session = None
 
     async def resolve(self, number: str) -> Optional[ResolveResult]:
-        """Try to resolve via tellows.de, checking cache first."""
+        """Try to resolve via tellows.de, checking cache first. Expects E.164 input."""
         # Check cache first
         cached = await self.db.get_cached(number, "tellows")
         if cached:
-            self.logger.debug("Cache hit for '%s' on tellows", number)
+            self.logger.debug("Cache hit for %r (ttl=%d days)", number, self.ttl_days)
             return ResolveResult(
                 number=number,
                 name=cached.get("name"),
@@ -61,87 +70,111 @@ class TellowsResolver(BaseResolverAdapter):
                 cached=True,
             )
 
-        # Scrape tellows.de
+        self.logger.debug("Cache miss for %r, fetching from tellows.de", number)
         result = await self._scrape(number)
         if result:
-            # Cache the result
             await self.db.set_cached(number, "tellows", result.model_dump(), self.ttl_days)
+            self.logger.debug("Cached result for %r (ttl=%d days)", number, self.ttl_days)
 
         return result
 
     async def _scrape(self, number: str) -> Optional[ResolveResult]:
         """Scrape tellows.de for phone number information."""
         if not self._session:
-            self.logger.error("HTTP session not initialized")
+            self.logger.error("HTTP session not initialized — was start() called?")
             return None
 
-        # Clean number for URL (digits only, no +)
-        clean_number = number.lstrip("+").replace(" ", "").replace("-", "").replace("/", "")
-        # For German numbers: convert +49 prefix to 0
-        if clean_number.startswith("49") and len(clean_number) > 4:
-            clean_number = "0" + clean_number[2:]
+        # Convert E.164 to national format for the URL
+        national = pn.to_scrape_format(number)
+        url = TELLOWS_URL.format(number=national)
 
-        url = TELLOWS_URL.format(number=clean_number)
+        self.logger.debug("GET %s  (number=%r national=%r)", url, number, national)
 
         try:
             async with self._session.get(url) as response:
+                self.logger.debug(
+                    "Response: HTTP %d  content-type=%s",
+                    response.status,
+                    response.headers.get("content-type", "?"),
+                )
                 if response.status != 200:
-                    self.logger.debug("Tellows returned %d for '%s'", response.status, number)
+                    self.logger.info(
+                        "Tellows returned HTTP %d for %r — skipping", response.status, number
+                    )
                     return None
 
                 html = await response.text()
+                self.logger.debug("Response body: %d bytes", len(html))
                 return self._parse_html(number, html)
+
         except aiohttp.ClientError as e:
-            self.logger.error("Failed to fetch tellows for '%s': %s", number, e)
+            self.logger.error("Request failed for %r: %s", number, e)
             return None
 
     def _parse_html(self, number: str, html: str) -> Optional[ResolveResult]:
         """Parse tellows.de HTML for caller information."""
         soup = BeautifulSoup(html, "lxml")
 
-        # Extract caller name/type
-        name = None
+        # --- Spam score ---
+        spam_score: Optional[int] = None
         score_tag = soup.select_one("div.score_result span.scoreresult")
         if score_tag:
-            # Score is 1-9 on tellows (1=trusted, 9=spam)
+            raw = score_tag.get_text(strip=True)
+            self.logger.debug("Selector 'div.score_result span.scoreresult' -> %r", raw)
             try:
-                score_text = score_tag.get_text(strip=True)
-                spam_score = int(score_text)
+                spam_score = int(raw)
             except (ValueError, TypeError):
-                spam_score = None
+                self.logger.debug("Could not parse spam score from %r", raw)
         else:
-            spam_score = None
+            self.logger.debug("Selector 'div.score_result span.scoreresult' -> no match")
 
-        # Extract caller name from the headline
+        # --- Caller name ---
+        name: Optional[str] = None
         headline = soup.select_one("h1.phonepagetitle")
         if headline:
-            name_parts = headline.get_text(strip=True)
+            raw = headline.get_text(strip=True)
+            self.logger.debug("Selector 'h1.phonepagetitle' -> %r", raw)
             # Typical format: "Rufnummer 0123456789 - Name"
-            if " - " in name_parts:
-                name = name_parts.split(" - ", 1)[1].strip()
+            if " - " in raw:
+                name = raw.split(" - ", 1)[1].strip()
+                self.logger.debug("Extracted name: %r", name)
+        else:
+            self.logger.debug("Selector 'h1.phonepagetitle' -> no match")
 
-        # Extract caller type
-        tags = []
+        # --- Caller type / tags ---
+        tags: list[str] = []
         caller_type = soup.select_one("span.callertype")
         if caller_type:
             type_text = caller_type.get_text(strip=True)
+            self.logger.debug("Selector 'span.callertype' -> %r", type_text)
             if type_text:
                 tags.append(type_text)
+        else:
+            self.logger.debug("Selector 'span.callertype' -> no match")
 
-        # Extract number of ratings
+        # --- Number of ratings ---
         ratings_el = soup.select_one("span.numratings")
         if ratings_el:
+            raw = ratings_el.get_text(strip=True)
+            self.logger.debug("Selector 'span.numratings' -> %r", raw)
             try:
-                num_ratings = int(ratings_el.get_text(strip=True).split()[0])
+                num_ratings = int(raw.split()[0])
                 if num_ratings == 0:
-                    # No ratings = no useful data
+                    self.logger.debug("Zero ratings for %r — returning no result", number)
                     return None
             except (ValueError, IndexError):
                 pass
+        else:
+            self.logger.debug("Selector 'span.numratings' -> no match")
 
-        if not name and not spam_score:
+        if not name and spam_score is None:
+            self.logger.debug("No usable data extracted for %r — returning no result", number)
             return None
 
+        self.logger.info(
+            "Tellows result for %r: name=%r score=%r tags=%r",
+            number, name, spam_score, tags,
+        )
         return ResolveResult(
             number=number,
             name=name or f"Tellows Score: {spam_score}",

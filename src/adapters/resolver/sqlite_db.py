@@ -9,31 +9,25 @@ from src.db.database import Database
 
 
 class SqliteResolver(BaseResolverAdapter):
-    """Resolves phone numbers from the local SQLite contacts database."""
+    """
+    Resolves phone numbers from the local SQLite contacts database.
+
+    Expects E.164 input from the pipeline. Contacts should be stored in E.164 format.
+    """
 
     def __init__(self, config: AdapterConfig, db: Database) -> None:
         super().__init__(config)
         self.db = db
 
     async def resolve(self, number: str) -> Optional[ResolveResult]:
-        """Look up a number in the SQLite contacts table."""
-        normalized = self._normalize_number(number)
-
-        # Try exact match
-        contact = await self.db.get_contact(normalized)
-
-        # Try without country code
-        if not contact and normalized.startswith("+49"):
-            alt = "0" + normalized[3:]
-            contact = await self.db.get_contact(alt)
-
-        # Try with country code
-        if not contact and normalized.startswith("0"):
-            alt = "+49" + normalized[1:]
-            contact = await self.db.get_contact(alt)
+        """Look up a number in the SQLite contacts table. Expects E.164 input."""
+        contact = await self.db.get_contact(number)
 
         if not contact:
+            self.logger.debug("No match for %r in SQLite contacts", number)
             return None
+
+        self.logger.debug("Match for %r in SQLite: %s", number, contact.get("name"))
 
         # Update last_seen timestamp
         await self.db.update_last_seen(contact["number"])
@@ -46,8 +40,3 @@ class SqliteResolver(BaseResolverAdapter):
             spam_score=contact.get("spam_score"),
             source="sqlite",
         )
-
-    @staticmethod
-    def _normalize_number(number: str) -> str:
-        """Basic number normalization."""
-        return number.strip().replace(" ", "").replace("-", "").replace("/", "")

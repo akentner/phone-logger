@@ -13,6 +13,10 @@ class JsonFileResolver(BaseResolverAdapter):
     """
     Resolves phone numbers from a JSON file.
 
+    Expects numbers stored in E.164 format (+49...).
+    The pipeline normalizes incoming numbers before calling resolve(),
+    so no further normalization is needed here.
+
     Expected JSON format:
     [
         {"number": "+491234567890", "name": "Max Mustermann", "tags": ["Familie"], "notes": "...", "spam_score": null},
@@ -43,7 +47,7 @@ class JsonFileResolver(BaseResolverAdapter):
 
             self._contacts = {}
             for entry in data:
-                number = self._normalize_number(entry.get("number", ""))
+                number = entry.get("number", "").strip()
                 if number:
                     self._contacts[number] = entry
 
@@ -53,20 +57,13 @@ class JsonFileResolver(BaseResolverAdapter):
             self._contacts = {}
 
     async def resolve(self, number: str) -> Optional[ResolveResult]:
-        """Look up a number in the loaded contacts."""
-        normalized = self._normalize_number(number)
-
-        # Try exact match first
-        entry = self._contacts.get(normalized)
-
-        # Try without country code
-        if not entry and normalized.startswith("+49"):
-            alt = "0" + normalized[3:]
-            entry = self._contacts.get(alt)
-
+        """Look up a number in the loaded contacts. Expects E.164 input."""
+        entry = self._contacts.get(number)
         if not entry:
+            self.logger.debug("No match for %r in JSON file", number)
             return None
 
+        self.logger.debug("Match for %r in JSON file: %s", number, entry.get("name"))
         return ResolveResult(
             number=number,
             name=entry.get("name"),
@@ -79,8 +76,3 @@ class JsonFileResolver(BaseResolverAdapter):
     async def reload(self) -> None:
         """Reload contacts from file (can be triggered via API)."""
         await self._load_contacts()
-
-    @staticmethod
-    def _normalize_number(number: str) -> str:
-        """Basic number normalization: strip whitespace, dashes, slashes."""
-        return number.strip().replace(" ", "").replace("-", "").replace("/", "")

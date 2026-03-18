@@ -6,6 +6,7 @@ from typing import Optional
 from src.adapters.base import BaseInputAdapter, BaseOutputAdapter
 from src.adapters.resolver.chain import ResolverChain
 from src.config import AdapterConfig, AppConfig
+from src.core import phone_number as pn
 from src.core.event import CallEvent, CallEventType, PipelineResult, ResolveResult
 from src.db.database import Database
 
@@ -99,16 +100,35 @@ class Pipeline:
 
         logger.info("Pipeline stopped")
 
+    def normalize(self, number: str) -> str:
+        """Normalize a phone number to E.164 using configured country/area code."""
+        return pn.normalize(
+            number,
+            country_code=self.config.phone.country_code,
+            local_area_code=self.config.phone.local_area_code,
+        )
+
     async def resolve(self, number: str) -> Optional[ResolveResult]:
         """Resolve a phone number through the chain (for direct API calls)."""
-        return await self.resolver_chain.resolve(number)
+        normalized = self.normalize(number)
+        return await self.resolver_chain.resolve(normalized)
 
     async def _on_event(self, event: CallEvent) -> None:
         """
         Handle an incoming call event.
 
         This is the central event handler called by all input adapters.
+        Normalizes the phone number to E.164 before passing it downstream.
         """
+        # Normalize number to E.164
+        if event.number:
+            normalized = self.normalize(event.number)
+            if normalized != event.number:
+                logger.debug(
+                    "Normalized number: %r -> %r", event.number, normalized
+                )
+            event = event.model_copy(update={"number": normalized})
+
         logger.info(
             "Event received: %s %s %s (source: %s)",
             event.direction.value,

@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 
 from src.adapters.base import BaseResolverAdapter
 from src.config import AdapterConfig
+from src.core import phone_number as pn
 from src.core.event import ResolveResult
 from src.db.database import Database
 
@@ -24,7 +25,13 @@ class KlarTelefonbuchResolver(BaseResolverAdapter):
     """
     Resolves phone numbers via klartelefonbuch.de reverse lookup.
 
-    Results are cached in the SQLite database with a configurable TTL.
+    Accepts E.164 input (+49...). Converts to national format for the URL.
+    Results are cached in SQLite with a configurable TTL.
+
+    Debug logging (log_level=DEBUG) shows:
+    - Full request URL
+    - HTTP status and response size
+    - CSS selector match results and extracted values
     """
 
     def __init__(self, config: AdapterConfig, db: Database) -> None:
@@ -39,6 +46,7 @@ class KlarTelefonbuchResolver(BaseResolverAdapter):
             headers={"User-Agent": USER_AGENT},
             timeout=aiohttp.ClientTimeout(total=15),
         )
+        self.logger.debug("HTTP session created")
 
     async def stop(self) -> None:
         """Close HTTP session."""
@@ -47,77 +55,111 @@ class KlarTelefonbuchResolver(BaseResolverAdapter):
             self._session = None
 
     async def resolve(self, number: str) -> Optional[ResolveResult]:
-        """Try to resolve via klartelefonbuch.de, checking cache first."""
+        """Try to resolve via klartelefonbuch.de, checking cache first. Expects E.164 input."""
         cached = await self.db.get_cached(number, "klartelbuch")
         if cached:
-            self.logger.debug("Cache hit for '%s' on klartelbuch", number)
+            self.logger.debug("Cache hit for %r (ttl=%d days)", number, self.ttl_days)
             return ResolveResult(
                 number=number,
                 name=cached.get("name"),
                 tags=cached.get("tags", []),
                 notes=cached.get("notes"),
+                spam_score=cached.get("spam_score"),
                 source="klartelbuch",
                 cached=True,
             )
 
+        self.logger.debug("Cache miss for %r, fetching from klartelefonbuch.de", number)
         result = await self._scrape(number)
         if result:
             await self.db.set_cached(number, "klartelbuch", result.model_dump(), self.ttl_days)
+            self.logger.debug("Cached result for %r (ttl=%d days)", number, self.ttl_days)
 
         return result
 
     async def _scrape(self, number: str) -> Optional[ResolveResult]:
         """Scrape klartelefonbuch.de for phone number information."""
         if not self._session:
-            self.logger.error("HTTP session not initialized")
+            self.logger.error("HTTP session not initialized — was start() called?")
             return None
 
-        clean_number = number.lstrip("+").replace(" ", "").replace("-", "").replace("/", "")
-        if clean_number.startswith("49") and len(clean_number) > 4:
-            clean_number = "0" + clean_number[2:]
+        national = pn.to_scrape_format(number)
+        url = KLARTELBUCH_URL.format(number=national)
 
-        url = KLARTELBUCH_URL.format(number=clean_number)
+        self.logger.debug("GET %s  (number=%r national=%r)", url, number, national)
 
         try:
             async with self._session.get(url) as response:
+                self.logger.debug(
+                    "Response: HTTP %d  content-type=%s",
+                    response.status,
+                    response.headers.get("content-type", "?"),
+                )
                 if response.status != 200:
-                    self.logger.debug("klartelefonbuch returned %d for '%s'", response.status, number)
+                    self.logger.info(
+                        "klartelefonbuch returned HTTP %d for %r — skipping",
+                        response.status, number,
+                    )
                     return None
 
                 html = await response.text()
+                self.logger.debug("Response body: %d bytes", len(html))
                 return self._parse_html(number, html)
+
         except aiohttp.ClientError as e:
-            self.logger.error("Failed to fetch klartelefonbuch for '%s': %s", number, e)
+            self.logger.error("Request failed for %r: %s", number, e)
             return None
 
     def _parse_html(self, number: str, html: str) -> Optional[ResolveResult]:
         """Parse klartelefonbuch.de HTML for caller information."""
         soup = BeautifulSoup(html, "lxml")
 
-        # Look for result entries
-        entry = soup.select_one("div.result-item, div.entry")
+        # --- Entry container ---
+        entry = None
+        for selector in ("div.result-item", "div.entry"):
+            entry = soup.select_one(selector)
+            if entry:
+                self.logger.debug("Entry container selector %r matched", selector)
+                break
+            self.logger.debug("Entry container selector %r -> no match", selector)
+
         if not entry:
+            self.logger.debug("No result entry found for %r — returning no result", number)
             return None
 
-        # Extract name
-        name_tag = entry.select_one("h2 a, div.name, span.entry-name")
-        if not name_tag:
-            return None
+        # --- Name ---
+        name: Optional[str] = None
+        for selector in ("h2 a", "div.name", "span.entry-name"):
+            name_tag = entry.select_one(selector)
+            if name_tag:
+                name = name_tag.get_text(strip=True)
+                self.logger.debug("Name selector %r -> %r", selector, name)
+                break
+            self.logger.debug("Name selector %r -> no match", selector)
 
-        name = name_tag.get_text(strip=True)
         if not name:
+            self.logger.debug("No name found for %r — returning no result", number)
             return None
 
-        # Extract address
-        notes = None
-        addr_tag = entry.select_one("div.address, span.entry-address")
-        if addr_tag:
-            notes = addr_tag.get_text(strip=True)
+        # --- Address / notes ---
+        notes: Optional[str] = None
+        for selector in ("div.address", "span.entry-address"):
+            addr_tag = entry.select_one(selector)
+            if addr_tag:
+                notes = addr_tag.get_text(strip=True)
+                self.logger.debug("Address selector %r -> %r", selector, notes)
+                break
+            self.logger.debug("Address selector %r -> no match", selector)
 
+        self.logger.info(
+            "klartelefonbuch result for %r: name=%r notes=%r",
+            number, name, notes,
+        )
         return ResolveResult(
             number=number,
             name=name,
             tags=[],
             notes=notes,
+            spam_score=None,
             source="klartelbuch",
         )
