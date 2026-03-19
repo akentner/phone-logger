@@ -10,22 +10,22 @@ The system uses a symmetric adapter concept across three layers:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    INPUT ADAPTERS                        │
-│  Fritz Callmonitor (TCP)  │  REST API  │  MQTT (opt.)     │
+│                    INPUT ADAPTERS                       │
+│  Fritz Callmonitor (TCP)  │  REST API  │  MQTT (opt.)   │
 │                                                         │
-│                 ┌─────▼────────────▼────┐                 │
-│                 │   Event Normalizer    │                 │
-│                 └─────────┬─────────────┘                 │
+│                 ┌─────▼────────────▼────┐               │
+│                 │   Event Normalizer    │               │
+│                 └─────────┬─────────────┘               │
 │                           │                             │
-│          ┌────────────────▼─────────────────┐          │
-│          │   RESOLVER (Chain-of-Resp.)       │          │
-│          │   JSON → SQLite → Tellows →       │          │
-│          │   DasTelefonbuch → Klartelbuch    │          │
-│          └────────────────┬─────────────────┘          │
+│          ┌────────────────▼─────────────────┐           │
+│          │   RESOLVER (Chain-of-Resp.)      │           │
+│          │   JSON → SQLite → Tellows →      │           │
+│          │   DasTelefonbuch → Klartelbuch   │           │
+│          └────────────────┬─────────────────┘           │
 │                           │                             │
 │                 ┌─────────▼───────────┐                 │
 │                 │   OUTPUT ADAPTERS   │                 │
-│  Call Log (SQLite) │  HA Webhook │ MQTT Publisher     │
+│  Call Log (SQLite) │  HA Webhook │ MQTT Publisher       │
 └─────────────────────────────────────────────────────────┘
 ```
 
