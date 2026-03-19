@@ -4,17 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>phone-logger - {% block title %}{% endblock %}</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" id="main-css" href="/static/css/style.css">
 </head>
 <body>
     <nav class="navbar">
         <h1>phone-logger</h1>
         <ul class="nav-links">
-            <li><a href="/pbx" class="{% if active == 'pbx' %}active{% endif %}">Telefonanlage</a></li>
-            <li><a href="/contacts" class="{% if active == 'contacts' %}active{% endif %}">Kontakte</a></li>
-            <li><a href="/calls" class="{% if active == 'calls' %}active{% endif %}">Anrufe</a></li>
-            <li><a href="/cache" class="{% if active == 'cache' %}active{% endif %}">Cache</a></li>
-            <li><a href="/config" class="{% if active == 'config' %}active{% endif %}">Konfiguration</a></li>
+            <li><a href="/pbx" data-path="/pbx" class="{% if active == 'pbx' %}active{% endif %}">Telefonanlage</a></li>
+            <li><a href="/contacts" data-path="/contacts" class="{% if active == 'contacts' %}active{% endif %}">Kontakte</a></li>
+            <li><a href="/calls" data-path="/calls" class="{% if active == 'calls' %}active{% endif %}">Anrufe</a></li>
+            <li><a href="/cache" data-path="/cache" class="{% if active == 'cache' %}active{% endif %}">Cache</a></li>
+            <li><a href="/config" data-path="/config" class="{% if active == 'config' %}active{% endif %}">Konfiguration</a></li>
         </ul>
     </nav>
 
@@ -28,6 +28,14 @@
         const INGRESS_PATH = window.location.pathname.match(/^\/api\/hassio_ingress\/[^/]+/) 
             ? window.location.pathname.match(/^\/api\/hassio_ingress\/[^/]+/)[0] 
             : '';
+
+        // Rewrite absolute URLs for ingress compatibility
+        if (INGRESS_PATH) {
+            document.getElementById('main-css').href = INGRESS_PATH + '/static/css/style.css';
+            document.querySelectorAll('a[data-path]').forEach(a => {
+                a.href = INGRESS_PATH + a.dataset.path;
+            });
+        }
         
         // I18n support
         let i18n = {};
