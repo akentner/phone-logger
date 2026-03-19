@@ -58,7 +58,7 @@ class Database:
         # Check if number_type column exists
         cursor = await self.db.execute("PRAGMA table_info(contacts)")
         columns = [row[1] for row in await cursor.fetchall()]
-        
+
         if "number_type" not in columns:
             logger.info("Running migration: add_number_type column")
             await self.db.execute(
@@ -70,9 +70,7 @@ class Database:
 
     async def get_contacts(self) -> list[dict]:
         """Get all contacts."""
-        cursor = await self.db.execute(
-            "SELECT * FROM contacts ORDER BY name"
-        )
+        cursor = await self.db.execute("SELECT * FROM contacts ORDER BY name")
         rows = await cursor.fetchall()
         return [self._row_to_contact(row) for row in rows]
 
@@ -84,9 +82,16 @@ class Database:
         row = await cursor.fetchone()
         return self._row_to_contact(row) if row else None
 
-    async def create_contact(self, number: str, name: str, number_type: str = "private",
-                             tags: list[str] | None = None, notes: str | None = None,
-                             spam_score: int | None = None, source: str = "sqlite") -> dict:
+    async def create_contact(
+        self,
+        number: str,
+        name: str,
+        number_type: str = "private",
+        tags: list[str] | None = None,
+        notes: str | None = None,
+        spam_score: int | None = None,
+        source: str = "sqlite",
+    ) -> dict:
         """Create a new contact."""
         now = datetime.now().isoformat()
         tags_json = json.dumps(tags or [])
@@ -107,7 +112,13 @@ class Database:
         updates = []
         params = []
         for key, value in kwargs.items():
-            if value is not None and key in ("name", "number_type", "tags", "notes", "spam_score"):
+            if value is not None and key in (
+                "name",
+                "number_type",
+                "tags",
+                "notes",
+                "spam_score",
+            ):
                 if key == "tags":
                     value = json.dumps(value)
                 updates.append(f"{key} = ?")
@@ -164,8 +175,9 @@ class Database:
 
         return json.loads(dict(row)["result_json"])
 
-    async def set_cached(self, number: str, adapter: str, result: dict,
-                         ttl_days: int = 7) -> None:
+    async def set_cached(
+        self, number: str, adapter: str, result: dict, ttl_days: int = 7
+    ) -> None:
         """Store a resolve result in cache."""
         await self.db.execute(
             """INSERT OR REPLACE INTO cache (number, adapter, result_json, cached_at, ttl_days)
@@ -176,9 +188,7 @@ class Database:
 
     async def get_all_cache_entries(self) -> list[dict]:
         """Get all cache entries with expiration status."""
-        cursor = await self.db.execute(
-            "SELECT * FROM cache ORDER BY cached_at DESC"
-        )
+        cursor = await self.db.execute("SELECT * FROM cache ORDER BY cached_at DESC")
         rows = await cursor.fetchall()
         entries = []
         for row in rows:
@@ -186,15 +196,17 @@ class Database:
             cached_at = datetime.fromisoformat(row_dict["cached_at"])
             expired = datetime.now() > cached_at + timedelta(days=row_dict["ttl_days"])
             result = json.loads(row_dict["result_json"])
-            entries.append({
-                "number": row_dict["number"],
-                "adapter": row_dict["adapter"],
-                "result_name": result.get("name"),
-                "spam_score": result.get("spam_score"),
-                "cached_at": row_dict["cached_at"],
-                "ttl_days": row_dict["ttl_days"],
-                "expired": expired,
-            })
+            entries.append(
+                {
+                    "number": row_dict["number"],
+                    "adapter": row_dict["adapter"],
+                    "result_name": result.get("name"),
+                    "spam_score": result.get("spam_score"),
+                    "cached_at": row_dict["cached_at"],
+                    "ttl_days": row_dict["ttl_days"],
+                    "expired": expired,
+                }
+            )
         return entries
 
     async def delete_cache_entry(self, number: str, adapter: str | None = None) -> bool:
@@ -222,25 +234,40 @@ class Database:
 
     # --- Call Log Operations ---
 
-    async def log_call(self, number: str, direction: str, event_type: str,
-                       resolved_name: str | None = None, source: str | None = None) -> int:
+    async def log_call(
+        self,
+        number: str,
+        direction: str,
+        event_type: str,
+        resolved_name: str | None = None,
+        source: str | None = None,
+    ) -> int:
         """Log a call event."""
         cursor = await self.db.execute(
             """INSERT INTO call_log (number, direction, event_type, resolved_name, source, timestamp)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (number, direction, event_type, resolved_name, source, datetime.now().isoformat()),
+            (
+                number,
+                direction,
+                event_type,
+                resolved_name,
+                source,
+                datetime.now().isoformat(),
+            ),
         )
         await self.db.commit()
         return cursor.lastrowid
 
-    async def get_call_log(self, page: int = 1, page_size: int = 50,
-                           number_filter: str | None = None) -> tuple[list[dict], int]:
+    async def get_call_log(
+        self, page: int = 1, page_size: int = 50, number_filter: str | None = None
+    ) -> tuple[list[dict], int]:
         """Get paginated call log."""
         where = ""
         params: list = []
         if number_filter:
-            where = "WHERE number LIKE ?"
-            params.append(f"%{number_filter}%")
+            where = "WHERE (number LIKE ? OR resolved_name LIKE ?)"
+            term = f"%{number_filter}%"
+            params.extend([term, term])
 
         # Get total count
         count_cursor = await self.db.execute(
@@ -281,7 +308,7 @@ class Database:
         resolved_name: Optional[str] = None,
     ) -> dict:
         """Insert or update an aggregated call.
-        
+
         Args:
             call_id: UUIDv7 call identifier
             connection_id: Fritz connection_id for call correlation
@@ -300,18 +327,16 @@ class Database:
             finished_at: When the call finished (DISCONNECT event)
             duration_seconds: Call duration in seconds
             resolved_name: Resolved name from resolver adapters
-        
+
         Returns:
             The call record as a dictionary
         """
         now = datetime.now().isoformat()
-        
+
         # Check if call exists
-        cursor = await self.db.execute(
-            "SELECT id FROM calls WHERE id = ?", (call_id,)
-        )
+        cursor = await self.db.execute("SELECT id FROM calls WHERE id = ?", (call_id,))
         existing = await cursor.fetchone()
-        
+
         if existing:
             # Update existing call
             await self.db.execute(
@@ -321,9 +346,19 @@ class Database:
                    duration_seconds = ?, resolved_name = ?, updated_at = ?
                    WHERE id = ?""",
                 (
-                    status, device, device_type, msn, trunk_id,
-                    line_id, 1 if is_internal else 0, connected_at, finished_at,
-                    duration_seconds, resolved_name, now, call_id
+                    status,
+                    device,
+                    device_type,
+                    msn,
+                    trunk_id,
+                    line_id,
+                    1 if is_internal else 0,
+                    connected_at,
+                    finished_at,
+                    duration_seconds,
+                    resolved_name,
+                    now,
+                    call_id,
                 ),
             )
         else:
@@ -336,21 +371,34 @@ class Database:
                    resolved_name, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    call_id, connection_id, caller_number, called_number, direction, status,
-                    device, device_type, msn, trunk_id, line_id, 1 if is_internal else 0,
-                    started_at or now, connected_at, finished_at, duration_seconds,
-                    resolved_name, now, now
+                    call_id,
+                    connection_id,
+                    caller_number,
+                    called_number,
+                    direction,
+                    status,
+                    device,
+                    device_type,
+                    msn,
+                    trunk_id,
+                    line_id,
+                    1 if is_internal else 0,
+                    started_at or now,
+                    connected_at,
+                    finished_at,
+                    duration_seconds,
+                    resolved_name,
+                    now,
+                    now,
                 ),
             )
-        
+
         await self.db.commit()
         return await self.get_call(call_id)
 
     async def get_call(self, call_id: str) -> Optional[dict]:
         """Get a single call by ID."""
-        cursor = await self.db.execute(
-            "SELECT * FROM calls WHERE id = ?", (call_id,)
-        )
+        cursor = await self.db.execute("SELECT * FROM calls WHERE id = ?", (call_id,))
         row = await cursor.fetchone()
         return self._row_to_call(row) if row else None
 
@@ -361,22 +409,24 @@ class Database:
         direction: Optional[str] = None,
         status: Optional[str] = None,
         line_id: Optional[int] = None,
+        search: Optional[str] = None,
     ) -> tuple[list[dict], int]:
         """Get paginated aggregated calls.
-        
+
         Args:
             page: Page number (1-indexed)
             page_size: Number of items per page
             direction: Filter by 'inbound' or 'outbound' (optional)
             status: Filter by status (optional)
             line_id: Filter by line ID (optional)
-        
+            search: Free-text search across caller_number, called_number, resolved_name (optional)
+
         Returns:
             Tuple of (call records, total count)
         """
         where_clauses = []
         params: list = []
-        
+
         if direction:
             where_clauses.append("direction = ?")
             params.append(direction)
@@ -386,16 +436,22 @@ class Database:
         if line_id is not None:
             where_clauses.append("line_id = ?")
             params.append(line_id)
-        
+        if search:
+            where_clauses.append(
+                "(caller_number LIKE ? OR called_number LIKE ? OR resolved_name LIKE ?)"
+            )
+            term = f"%{search}%"
+            params.extend([term, term, term])
+
         where = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
-        
+
         # Get total count
         count_cursor = await self.db.execute(
             f"SELECT COUNT(*) FROM calls {where}", params
         )
         count_result = await count_cursor.fetchone()
         total = count_result[0] if count_result else 0
-        
+
         # Get page
         offset = (page - 1) * page_size
         params_with_limit = params + [page_size, offset]

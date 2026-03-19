@@ -17,7 +17,7 @@
         </div>
     </div>
     <div class="search-bar">
-        <input type="text" class="form-control" id="search-filter" placeholder="Nummer oder Filter...">
+        <input type="text" class="form-control" id="search-filter" placeholder="Name, Nummer, Status oder Richtung...">
         <button class="btn btn-primary" onclick="loadCalls()">Suchen</button>
     </div>
     <div class="table-wrapper">
@@ -42,31 +42,64 @@
     let currentView = 'history'; // 'history' or 'events'
     const pageSize = 50;
 
+    // MSN lookup map: e164 -> "number (label)"
+    let msnMap = {};
+
+    async function loadMsns() {
+        try {
+            const msns = await apiCall('/api/pbx/msns');
+            for (const m of msns) {
+                msnMap[m.e164] = m.label ? `${m.number} (${m.label})` : m.number;
+            }
+        } catch (e) {
+            // PBX not configured or not available — ignore
+        }
+    }
+
+    function msnLabel(msn) {
+        if (!msn) return '-';
+        return msnMap[msn] || msn;
+    }
+
     function switchView(view) {
         currentView = view;
         currentPage = 1;
         loadCalls();
     }
 
+    /** Escape HTML special characters to prevent XSS in template literals */
+    function esc(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
     async function loadCalls(page = 1) {
         currentPage = page;
-        const filter = document.getElementById('search-filter').value;
-        
+        const filter = document.getElementById('search-filter').value.trim();
+
         let url;
         if (currentView === 'history') {
             url = `/api/calls?page=${page}&page_size=${pageSize}`;
-            // Add filters for aggregated calls
             if (filter) {
-                // Could filter by direction or status if filter matches
-                if (['inbound', 'ausgehend', 'eingehend'].includes(filter.toLowerCase())) {
-                    url += `&direction=${filter.toLowerCase().startsWith('ausgehend') || filter.toLowerCase().startsWith('outbound') ? 'outbound' : 'inbound'}`;
-                } else if (['answered', 'beantwortet', 'missed', 'verpasst', 'notReached'].includes(filter.toLowerCase())) {
-                    url += `&status=${filter.toLowerCase()}`;
+                const lower = filter.toLowerCase();
+                // Direction keywords
+                if (['inbound', 'eingehend'].includes(lower)) {
+                    url += '&direction=inbound';
+                } else if (['outbound', 'ausgehend'].includes(lower)) {
+                    url += '&direction=outbound';
                 }
+                // Status keywords
+                else if (['answered', 'beantwortet'].includes(lower)) url += '&status=answered';
+                else if (['missed', 'verpasst'].includes(lower)) url += '&status=missed';
+                else if (['notreached', 'nicht erreichbar'].includes(lower)) url += '&status=notReached';
+                else if (['ringing', 'klingelt'].includes(lower)) url += '&status=ringing';
+                else if (['dialing', 'wählt'].includes(lower)) url += '&status=dialing';
+                // Free-text search (name or number)
+                else url += `&search=${encodeURIComponent(filter)}`;
             }
         } else {
             url = `/api/calls/events?page=${page}&page_size=${pageSize}`;
-            if (filter) url += `&number=${encodeURIComponent(filter)}`;
+            if (filter) url += `&search=${encodeURIComponent(filter)}`;
         }
 
         try {
@@ -80,7 +113,7 @@
     function renderCalls(data) {
         const tbody = document.getElementById('calls-table');
         const headerRow = document.getElementById('header-row');
-        
+
         if (currentView === 'history') {
             // Aggregated calls view
             headerRow.innerHTML = `
@@ -89,18 +122,28 @@
                 <th>Richtung</th>
                 <th>Anrufer</th>
                 <th>Angerufener</th>
-                <th>Gerät</th>
+                <th>MSN</th>
+                <th>Ger&auml;t</th>
                 <th>Dauer</th>
                 <th>Aktionen</th>
             `;
-            
+
             if (data.items.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8">Keine Anrufe vorhanden</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9">Keine Anrufe vorhanden</td></tr>';
                 document.getElementById('pagination').innerHTML = '';
                 return;
             }
 
-            tbody.innerHTML = data.items.map(c => `
+            tbody.innerHTML = data.items.map(c => {
+                // Resolved name on the remote party (direction-dependent)
+                const callerDisplay = c.direction === 'inbound'
+                    ? (c.resolved_name || c.caller_number)
+                    : c.caller_number;
+                const calledDisplay = c.direction === 'outbound'
+                    ? (c.resolved_name || c.called_number)
+                    : c.called_number;
+
+                return `
                 <tr>
                     <td>${formatDate(c.started_at)}</td>
                     <td>
@@ -113,15 +156,16 @@
                             ${c.direction === 'inbound' ? '&#x2199;&#xFE0F; Eingehend' : '&#x2197;&#xFE0F; Ausgehend'}
                         </span>
                     </td>
-                    <td><strong>${c.caller_number}</strong></td>
-                    <td><strong>${c.called_number}</strong></td>
+                    <td title="${esc(c.caller_number)}"><strong>${esc(callerDisplay)}</strong></td>
+                    <td title="${esc(c.called_number)}"><strong>${esc(calledDisplay)}</strong></td>
+                    <td>${esc(msnLabel(c.msn))}</td>
                     <td>${c.device || c.device_type || '-'}</td>
                     <td>${c.duration_seconds !== null ? formatDuration(c.duration_seconds) : '-'}</td>
                     <td>
-                        <button class="btn btn-sm btn-outline" onclick="resolveNumber('${c.caller_number}')">Details</button>
+                        <button class="btn btn-sm btn-outline" onclick="resolveNumber('${esc(c.caller_number)}')">Details</button>
                     </td>
-                </tr>
-            `).join('');
+                </tr>`;
+            }).join('');
         } else {
             // Raw events view
             headerRow.innerHTML = `
@@ -129,13 +173,12 @@
                 <th>Richtung</th>
                 <th>Event</th>
                 <th>Nummer</th>
-                <th>Name</th>
                 <th>Quelle</th>
                 <th>Aktionen</th>
             `;
-            
+
             if (data.items.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7">Keine Events vorhanden</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6">Keine Events vorhanden</td></tr>';
                 document.getElementById('pagination').innerHTML = '';
                 return;
             }
@@ -149,11 +192,10 @@
                         </span>
                     </td>
                     <td>${c.event_type}</td>
-                    <td><strong>${c.number}</strong></td>
-                    <td>${c.resolved_name || '<em style="color:var(--text-secondary)">Unbekannt</em>'}</td>
+                    <td title="${esc(c.number)}"><strong>${esc(c.resolved_name || c.number)}</strong></td>
                     <td>${c.source || '-'}</td>
                     <td>
-                        <button class="btn btn-sm btn-outline" onclick="resolveNumber('${c.number}')">Auflösen</button>
+                        <button class="btn btn-sm btn-outline" onclick="resolveNumber('${esc(c.number)}')">Aufl&ouml;sen</button>
                     </td>
                 </tr>
             `).join('');
@@ -168,9 +210,9 @@
         }
         let html = '';
         if (currentPage > 1) {
-            html += `<button class="btn btn-sm btn-outline" onclick="loadCalls(${currentPage - 1})">&#x276E; Zurück</button>`;
+            html += `<button class="btn btn-sm btn-outline" onclick="loadCalls(${currentPage - 1})">&#x276E; Zur&uuml;ck</button>`;
         }
-        html += `<span>Seite ${currentPage} von ${totalPages} (${data.total} Einträge)</span>`;
+        html += `<span>Seite ${currentPage} von ${totalPages} (${data.total} Eintr&auml;ge)</span>`;
         if (currentPage < totalPages) {
             html += `<button class="btn btn-sm btn-outline" onclick="loadCalls(${currentPage + 1})">Weiter &#x276F;</button>`;
         }
@@ -179,11 +221,11 @@
 
     function getStatusLabel(status) {
         const labels = {
-            'ringing': '📞 Klingelt',
-            'dialing': '📱 Wählt',
-            'answered': '✅ Beantwortet',
-            'missed': '❌ Verpasst',
-            'notReached': '🚫 Nicht erreichbar'
+            'ringing': '&#x1F4DE; Klingelt',
+            'dialing': '&#x1F4F1; W&auml;hlt',
+            'answered': '&#x2705; Beantwortet',
+            'missed': '&#x274C; Verpasst',
+            'notReached': '&#x1F6AB; Nicht erreichbar'
         };
         return labels[status] || status;
     }
@@ -200,7 +242,7 @@
             const result = await apiCall(`/api/resolve/${encodeURIComponent(number)}`);
             showAlert(`${number}: ${result.name} (Quelle: ${result.source})`);
         } catch (e) {
-            showAlert(`Nicht auflösbar: ${number}`, 'error');
+            showAlert(`Nicht aufl&ouml;sbar: ${number}`, 'error');
         }
     }
 
@@ -208,7 +250,8 @@
         if (e.key === 'Enter') loadCalls();
     });
 
-    loadCalls();
+    // Load MSN map first, then initial call list
+    loadMsns().then(() => loadCalls());
 </script>
 
 <style>

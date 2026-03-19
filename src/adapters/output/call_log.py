@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional
 
 from src.adapters.base import BaseOutputAdapter
 from src.config import AdapterConfig
-from src.core.event import CallEvent, CallEventType, ResolveResult
+from src.core.event import CallDirection, CallEvent, CallEventType, ResolveResult
 from src.core.utils import uuid7
 from src.db.database import Database
 
@@ -80,10 +80,18 @@ class CallLogOutputAdapter(BaseOutputAdapter):
         # Extract device info from the event (PBX-enriched) or line_state fallback
         device_info = event.device or (line_state.device if line_state else None)
         device_name = device_info.name if device_info else None
-        device_type = device_info.type if device_info else None  # DeviceInfo.type is the type string
+        device_type = (
+            device_info.type if device_info else None
+        )  # DeviceInfo.type is the type string
 
         # is_internal lives on line_state (set by PBX enrichment)
         is_internal = line_state.is_internal if line_state else False
+
+        # Determine the local MSN (own number) based on direction
+        if event.direction == CallDirection.INBOUND:
+            msn = event.called_number  # inbound: we are the called party
+        else:
+            msn = event.caller_number  # outbound: we are the caller
 
         if event_type == CallEventType.RING:
             # New inbound call — create record
@@ -96,6 +104,7 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                 status="ringing",
                 device=device_name,
                 device_type=device_type,
+                msn=msn,
                 trunk_id=event.trunk_id,
                 line_id=event.line_id,
                 is_internal=is_internal,
@@ -114,6 +123,7 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                 status="dialing",
                 device=device_name,
                 device_type=device_type,
+                msn=msn,
                 trunk_id=event.trunk_id,
                 line_id=event.line_id,
                 is_internal=is_internal,
@@ -134,6 +144,7 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                     status="answered",
                     device=device_name or existing.get("device"),
                     device_type=device_type or existing.get("device_type"),
+                    msn=existing.get("msn"),
                     trunk_id=existing.get("trunk_id"),
                     line_id=existing.get("line_id"),
                     is_internal=existing.get("is_internal", False),
@@ -143,7 +154,8 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                 )
             else:
                 self.logger.warning(
-                    "CONNECT for unknown connection_id=%d — no existing call record", connection_id
+                    "CONNECT for unknown connection_id=%d — no existing call record",
+                    connection_id,
                 )
 
         elif event_type == CallEventType.DISCONNECT:
@@ -167,7 +179,9 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                     start_time = datetime.fromisoformat(connected_at)
                 else:
                     start_time = datetime.fromisoformat(existing["started_at"])
-                duration = max(0, int((datetime.fromisoformat(now) - start_time).total_seconds()))
+                duration = max(
+                    0, int((datetime.fromisoformat(now) - start_time).total_seconds())
+                )
 
                 await self.db.upsert_call(
                     call_id=existing["id"],
@@ -178,6 +192,7 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                     status=final_status,
                     device=existing.get("device"),
                     device_type=existing.get("device_type"),
+                    msn=existing.get("msn"),
                     trunk_id=existing.get("trunk_id"),
                     line_id=existing.get("line_id"),
                     is_internal=existing.get("is_internal", False),
@@ -189,5 +204,6 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                 )
             else:
                 self.logger.warning(
-                    "DISCONNECT for unknown connection_id=%d — no existing call record", connection_id
+                    "DISCONNECT for unknown connection_id=%d — no existing call record",
+                    connection_id,
                 )
