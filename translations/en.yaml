@@ -1,0 +1,42 @@
+---
+configuration:
+  log_level:
+    name: Log Level
+    description: Set the logging verbosity.
+  phone_country_code:
+    name: Country Code
+    description: >-
+      Default country code without leading + or 00 (e.g. "49" for Germany,
+      "43" for Austria, "41" for Switzerland).
+  phone_local_area_code:
+    name: Local Area Code
+    description: >-
+      Local area code without leading 0 (e.g. "30" for Berlin).
+      Required to resolve short local numbers that arrive without area code.
+  fritz_host:
+    name: Fritz!Box Host
+    description: IP address or hostname of your Fritz!Box (default 192.168.178.1).
+  fritz_port:
+    name: Fritz!Box Port
+    description: Callmonitor port on the Fritz!Box (default 1012). Enable via #96*5* on a connected phone.
+  input_adapters:
+    name: Input Adapters
+    description: Configure how call events are received.
+  resolver_adapters:
+    name: Resolver Adapters
+    description: Configure how phone numbers are resolved to names.
+  output_adapters:
+    name: Output Adapters
+    description: Configure where call events are sent.
+  webhooks:
+    name: Webhooks
+    description: HTTP webhooks to notify on call events.
+  mqtt_broker:
+    name: MQTT Broker
+    description: >-
+      Hostname of the MQTT broker (use "homeassistant" for the built-in broker).
+  mqtt_topic_prefix:
+    name: MQTT Topic Prefix
+    description: >-
+      Prefix for MQTT topics (e.g. "phone-logger"). Events are published to
+      {prefix}/event, line state to {prefix}/line/{id}/state.

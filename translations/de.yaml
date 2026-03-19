@@ -1,0 +1,42 @@
+---
+configuration:
+  log_level:
+    name: Log-Level
+    description: Legt die Ausführlichkeit der Protokollierung fest.
+  phone_country_code:
+    name: Landesvorwahl
+    description: >-
+      Landesvorwahl ohne führendes + oder 00 (z.B. "49" für Deutschland,
+      "43" für Österreich, "41" für die Schweiz).
+  phone_local_area_code:
+    name: Ortsvorwahl
+    description: >-
+      Ortsvorwahl ohne führende 0 (z.B. "30" für Berlin).
+      Wird benötigt, um kurze lokale Nummern ohne Vorwahl aufzulösen.
+  fritz_host:
+    name: Fritz!Box Host
+    description: IP-Adresse oder Hostname der Fritz!Box (Standard 192.168.178.1).
+  fritz_port:
+    name: Fritz!Box Port
+    description: Callmonitor-Port der Fritz!Box (Standard 1012). Aktivierung über #96*5* an einem angeschlossenen Telefon.
+  input_adapters:
+    name: Eingangs-Adapter
+    description: Konfiguriert, wie Anrufereignisse empfangen werden.
+  resolver_adapters:
+    name: Auflösungs-Adapter
+    description: Konfiguriert, wie Telefonnummern zu Namen aufgelöst werden.
+  output_adapters:
+    name: Ausgangs-Adapter
+    description: Konfiguriert, wohin Anrufereignisse gesendet werden.
+  webhooks:
+    name: Webhooks
+    description: HTTP-Webhooks für Benachrichtigungen bei Anrufereignissen.
+  mqtt_broker:
+    name: MQTT Broker
+    description: >-
+      Hostname des MQTT-Brokers ("homeassistant" für den integrierten Broker).
+  mqtt_topic_prefix:
+    name: MQTT Topic-Prefix
+    description: >-
+      Präfix für MQTT-Topics (z.B. "phone-logger"). Events werden unter
+      {prefix}/event publiziert, Leitungsstatus unter {prefix}/line/{id}/state.
