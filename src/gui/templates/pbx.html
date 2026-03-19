@@ -74,7 +74,6 @@
 
     async function loadPbxStatus() {
         try {
-            await loadTranslations('de');
             const data = await apiCall('/api/pbx/status');
             renderLines(data.lines);
             renderTrunks(data.trunks);
