@@ -75,7 +75,8 @@ def create_application():
 
     # Create FastAPI app with lifespan handlers (preferred over @app.on_event)
     @asynccontextmanager
-    async def _lifespan():
+    async def _lifespan(app):
+        # `app` is accepted for compatibility with FastAPI/Starlette lifespan
         logger.info("Starting up...")
         await _db.connect()
         await _pipeline.setup()
@@ -89,8 +90,8 @@ def create_application():
             await _db.close()
             logger.info("phone-logger stopped")
 
-    # Create FastAPI app and provide lifespan context
-    app = create_app(lifespan=_lifespan())
+    # Create FastAPI app and provide lifespan function (do not call it here)
+    app = create_app(lifespan=_lifespan)
 
     # Register API routes
     app.include_router(resolve.router)
