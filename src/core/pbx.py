@@ -186,7 +186,7 @@ class PbxStateManager:
     def _msn_to_e164(self, msn: str) -> str:
         """Convert a raw MSN number to E.164 using PhoneConfig."""
         # MSN + local_area_code + country_code → E.164
-        # e.g. "990133" + area "6181" + country "49" → "+496181990133"
+        # e.g. "123456" + area "30" + country "49" → "+4930123456"
         if self._phone_config.local_area_code:
             national = f"0{self._phone_config.local_area_code}{msn}"
         else:

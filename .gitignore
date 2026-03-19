@@ -31,6 +31,9 @@ data/*.json
 .env
 .env.local
 
+# Local dev config (may contain real phone numbers, addresses, credentials)
+config.dev.yaml
+
 # Docker
 .docker/
 

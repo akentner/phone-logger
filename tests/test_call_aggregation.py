@@ -27,12 +27,13 @@ async def test_db():
 async def test_uuid7_generation():
     """Test that uuid7() generates valid UUIDs."""
     uuids = [uuid7() for _ in range(5)]
-    
+
     # All should be unique
     assert len(set(uuids)) == 5
-    
+
     # All should be valid UUIDs
     import uuid
+
     for u in uuids:
         parsed = uuid.UUID(u)
         assert parsed.version == 7
@@ -42,12 +43,13 @@ async def test_uuid7_generation():
 async def test_uuid7_sortability():
     """Test that uuid7() generates sortable UUIDs."""
     import time
+
     uuids = []
-    
+
     for i in range(3):
         uuids.append(uuid7())
         time.sleep(0.01)  # Small delay to ensure timestamp difference
-    
+
     # Should be in order
     assert uuids == sorted(uuids)
 
@@ -56,7 +58,7 @@ async def test_uuid7_sortability():
 async def test_upsert_call_create(test_db):
     """Test creating a new call."""
     db = test_db
-    
+
     call_id = uuid7()
     await db.upsert_call(
         call_id=call_id,
@@ -73,7 +75,7 @@ async def test_upsert_call_create(test_db):
         is_internal=False,
         started_at=datetime.now().isoformat(),
     )
-    
+
     # Retrieve the call
     call = await db.get_call(call_id)
     assert call is not None
@@ -88,10 +90,10 @@ async def test_upsert_call_create(test_db):
 async def test_upsert_call_update(test_db):
     """Test updating an existing call."""
     db = test_db
-    
+
     call_id = uuid7()
     started_at = datetime.now().isoformat()
-    
+
     # Create initial call
     await db.upsert_call(
         call_id=call_id,
@@ -102,7 +104,7 @@ async def test_upsert_call_update(test_db):
         status="ringing",
         started_at=started_at,
     )
-    
+
     # Update with connected_at
     connected_at = datetime.now().isoformat()
     await db.upsert_call(
@@ -115,7 +117,7 @@ async def test_upsert_call_update(test_db):
         started_at=started_at,
         connected_at=connected_at,
     )
-    
+
     # Retrieve and verify update
     call = await db.get_call(call_id)
     assert call["status"] == "answered"
@@ -126,7 +128,7 @@ async def test_upsert_call_update(test_db):
 async def test_get_calls_pagination(test_db):
     """Test getting calls with pagination."""
     db = test_db
-    
+
     # Create multiple calls
     for i in range(5):
         await db.upsert_call(
@@ -137,12 +139,12 @@ async def test_get_calls_pagination(test_db):
             direction="inbound" if i % 2 == 0 else "outbound",
             status="answered",
         )
-    
+
     # Get first page
     calls, total = await db.get_calls(page=1, page_size=2)
     assert len(calls) == 2
     assert total == 5
-    
+
     # Get second page
     calls, total = await db.get_calls(page=2, page_size=2)
     assert len(calls) == 2
@@ -152,7 +154,7 @@ async def test_get_calls_pagination(test_db):
 async def test_get_calls_filter_by_direction(test_db):
     """Test filtering calls by direction."""
     db = test_db
-    
+
     # Create calls with different directions
     for i in range(3):
         await db.upsert_call(
@@ -163,7 +165,7 @@ async def test_get_calls_filter_by_direction(test_db):
             direction="inbound",
             status="answered",
         )
-    
+
     for i in range(3, 5):
         await db.upsert_call(
             call_id=uuid7(),
@@ -173,12 +175,12 @@ async def test_get_calls_filter_by_direction(test_db):
             direction="outbound",
             status="answered",
         )
-    
+
     # Filter by inbound
     calls, total = await db.get_calls(direction="inbound")
     assert total == 3
     assert all(c["direction"] == "inbound" for c in calls)
-    
+
     # Filter by outbound
     calls, total = await db.get_calls(direction="outbound")
     assert total == 2
@@ -189,7 +191,7 @@ async def test_get_calls_filter_by_direction(test_db):
 async def test_get_calls_filter_by_status(test_db):
     """Test filtering calls by status."""
     db = test_db
-    
+
     # Create calls with different statuses
     statuses = ["answered", "missed", "notReached"]
     for i, status in enumerate(statuses):
@@ -201,7 +203,7 @@ async def test_get_calls_filter_by_status(test_db):
             direction="inbound",
             status=status,
         )
-    
+
     # Filter by status
     calls, total = await db.get_calls(status="answered")
     assert total == 1
@@ -212,10 +214,10 @@ async def test_get_calls_filter_by_status(test_db):
 async def test_get_call_by_connection_id(test_db):
     """Test getting a call by connection_id."""
     db = test_db
-    
+
     connection_id = 99
     call_id = uuid7()
-    
+
     await db.upsert_call(
         call_id=call_id,
         connection_id=connection_id,
@@ -224,7 +226,7 @@ async def test_get_call_by_connection_id(test_db):
         direction="inbound",
         status="answered",
     )
-    
+
     # Retrieve by connection_id
     call = await db.get_call_by_connection_id(connection_id)
     assert call is not None
@@ -238,7 +240,7 @@ async def test_call_log_adapter_raw_event(test_db):
     db = test_db
     config = AdapterConfig(type="call_log", name="test_call_log", enabled=True)
     adapter = CallLogOutputAdapter(config, db)
-    
+
     event = CallEvent(
         number="+496181123456",
         direction=CallDirection.INBOUND,
@@ -247,9 +249,9 @@ async def test_call_log_adapter_raw_event(test_db):
         caller_number="+496181123456",
         called_number="990133",
     )
-    
+
     await adapter.handle(event, None)
-    
+
     # Verify raw event was logged
     calls, total = await db.get_call_log()
     assert total == 1
@@ -263,7 +265,7 @@ async def test_call_log_adapter_with_line_state(test_db):
     db = test_db
     config = AdapterConfig(type="call_log", name="test_call_log", enabled=True)
     adapter = CallLogOutputAdapter(config, db)
-    
+
     event = CallEvent(
         number="+496181123456",
         direction=CallDirection.INBOUND,
@@ -272,10 +274,10 @@ async def test_call_log_adapter_with_line_state(test_db):
         caller_number="+496181123456",
         called_number="990133",
     )
-    
+
     # Test that handler works without line_state (should not crash)
     await adapter.handle(event, None)
-    
+
     # Verify raw event was logged
     calls, total = await db.get_call_log()
     assert total == 1
@@ -289,12 +291,12 @@ async def test_adapter_ring_creates_call_record(test_db):
     adapter = CallLogOutputAdapter(config, test_db)
 
     event = CallEvent(
-        number="+491783278576",
+        number="+491701234567",
         direction=CallDirection.INBOUND,
         event_type=CallEventType.RING,
         connection_id="7",
-        caller_number="+491783278576",
-        called_number="+4961813698237",
+        caller_number="+491701234567",
+        called_number="+496301234567",
         trunk_id="SIP4",
         line_id=0,
     )
@@ -303,7 +305,7 @@ async def test_adapter_ring_creates_call_record(test_db):
     call = await test_db.get_call_by_connection_id(7)
     assert call is not None
     assert call["status"] == "ringing"
-    assert call["caller_number"] == "+491783278576"
+    assert call["caller_number"] == "+491701234567"
     assert call["direction"] == "inbound"
     assert call["trunk_id"] == "SIP4"
     assert call["line_id"] == 0
@@ -318,12 +320,12 @@ async def test_adapter_missed_call_lifecycle(test_db):
     adapter = CallLogOutputAdapter(config, test_db)
 
     ring = CallEvent(
-        number="+491783278576",
+        number="+491701234567",
         direction=CallDirection.INBOUND,
         event_type=CallEventType.RING,
         connection_id="8",
-        caller_number="+491783278576",
-        called_number="+4961813698237",
+        caller_number="+491701234567",
+        called_number="+496301234567",
     )
     disconnect = CallEvent(
         number="",
@@ -352,15 +354,15 @@ async def test_adapter_answered_call_lifecycle(test_db):
     adapter = CallLogOutputAdapter(config, test_db)
 
     ring = CallEvent(
-        number="+491783278576",
+        number="+491701234567",
         direction=CallDirection.INBOUND,
         event_type=CallEventType.RING,
         connection_id="9",
-        caller_number="+491783278576",
-        called_number="+4961813698237",
+        caller_number="+491701234567",
+        called_number="+496301234567",
     )
     connect = CallEvent(
-        number="+491783278576",
+        number="+491701234567",
         direction=CallDirection.INBOUND,
         event_type=CallEventType.CONNECT,
         connection_id="9",
@@ -394,12 +396,12 @@ async def test_adapter_outbound_not_reached(test_db):
     adapter = CallLogOutputAdapter(config, test_db)
 
     call_event = CallEvent(
-        number="+491783278576",
+        number="+491701234567",
         direction=CallDirection.OUTBOUND,
         event_type=CallEventType.CALL,
         connection_id="10",
-        caller_number="+4961813698237",
-        called_number="+491783278576",
+        caller_number="+496301234567",
+        called_number="+491701234567",
     )
     disconnect = CallEvent(
         number="",

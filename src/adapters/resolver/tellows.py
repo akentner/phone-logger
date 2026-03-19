@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 TELLOWS_URL = "https://www.tellows.de/num/{number}"
 
 # Tellows expects E.164 with + URL-encoded as %2B
-# e.g. https://www.tellows.de/num/%2B496181990134
+# e.g. https://www.tellows.de/num/%2B496301234567
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -75,8 +75,12 @@ class TellowsResolver(BaseResolverAdapter):
         self.logger.debug("Cache miss for %r, fetching from tellows.de", number)
         result = await self._scrape(number)
         if result:
-            await self.db.set_cached(number, "tellows", result.model_dump(), self.ttl_days)
-            self.logger.debug("Cached result for %r (ttl=%d days)", number, self.ttl_days)
+            await self.db.set_cached(
+                number, "tellows", result.model_dump(), self.ttl_days
+            )
+            self.logger.debug(
+                "Cached result for %r (ttl=%d days)", number, self.ttl_days
+            )
 
         return result
 
@@ -88,6 +92,7 @@ class TellowsResolver(BaseResolverAdapter):
 
         # Tellows expects E.164 with + URL-encoded as %2B
         from urllib.parse import quote
+
         url = TELLOWS_URL.format(number=quote(number, safe=""))
 
         self.logger.debug("GET %s  (number=%r)", url, number)
@@ -101,7 +106,9 @@ class TellowsResolver(BaseResolverAdapter):
                 )
                 if response.status != 200:
                     self.logger.info(
-                        "Tellows returned HTTP %d for %r — skipping", response.status, number
+                        "Tellows returned HTTP %d for %r — skipping",
+                        response.status,
+                        number,
                     )
                     return None
 
@@ -119,12 +126,14 @@ class TellowsResolver(BaseResolverAdapter):
 
         # --- Spam score ---
         # Selector: #tellowsscore > div > a > img.scoreimage
-        # Alt attribute format: "tellows Bewertung für 06181990133 : Score 5"
+        # Alt attribute format: "tellows Bewertung für 06301234567 : Score 5"
         spam_score: Optional[int] = None
         score_img = soup.select_one("#tellowsscore > div > a > img.scoreimage")
         if score_img:
             alt = str(score_img.get("alt", ""))
-            self.logger.debug("Selector '#tellowsscore > div > a > img.scoreimage' -> alt=%r", alt)
+            self.logger.debug(
+                "Selector '#tellowsscore > div > a > img.scoreimage' -> alt=%r", alt
+            )
             # Extract score from "... : Score 5"
             if ": Score " in alt:
                 try:
@@ -133,7 +142,9 @@ class TellowsResolver(BaseResolverAdapter):
                 except (ValueError, TypeError):
                     self.logger.debug("Could not parse score from alt %r", alt)
         else:
-            self.logger.debug("Selector '#tellowsscore > div > a > img.scoreimage' -> no match")
+            self.logger.debug(
+                "Selector '#tellowsscore > div > a > img.scoreimage' -> no match"
+            )
 
         # --- Caller name ---
         name: Optional[str] = None
@@ -167,7 +178,9 @@ class TellowsResolver(BaseResolverAdapter):
             try:
                 num_ratings = int(raw.split()[0])
                 if num_ratings == 0:
-                    self.logger.debug("Zero ratings for %r — returning no result", number)
+                    self.logger.debug(
+                        "Zero ratings for %r — returning no result", number
+                    )
                     return None
             except (ValueError, IndexError):
                 pass
@@ -175,12 +188,17 @@ class TellowsResolver(BaseResolverAdapter):
             self.logger.debug("Selector 'span.numratings' -> no match")
 
         if not name and spam_score is None:
-            self.logger.debug("No usable data extracted for %r — returning no result", number)
+            self.logger.debug(
+                "No usable data extracted for %r — returning no result", number
+            )
             return None
 
         self.logger.info(
             "Tellows result for %r: name=%r score=%r tags=%r",
-            number, name, spam_score, tags,
+            number,
+            name,
+            spam_score,
+            tags,
         )
         return ResolveResult(
             number=number,

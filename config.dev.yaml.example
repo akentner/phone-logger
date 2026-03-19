@@ -1,0 +1,203 @@
+---
+# Development configuration for phone-logger
+# Usage: cp config.dev.yaml.example config.dev.yaml && edit to taste
+#        PHONE_LOGGER_CONFIG=config.dev.yaml python -m src.main
+
+data_path: "./data"
+ingress_port: 8080
+log_level: "INFO"
+#log_level: "DEBUG"
+timezone: "Europe/Berlin"
+
+# Phone number normalization
+phone:
+  country_code: "49"         # Germany
+  local_area_code: "30"      # Local area code without leading 0 (e.g. Berlin)
+                             # Required to resolve short local numbers like "123456"
+
+# PBX infrastructure
+pbx:
+  lines:
+    - id: 0
+    - id: 1
+    - id: 2
+    - id: 3
+    - id: 4
+
+  trunks:
+    - id: "SIP0"
+      type: "sip"
+      label: "Provider 1"
+    - id: "SIP1"
+      type: "sip"
+      label: "Provider 2"
+    - id: "SIP2"
+      type: "sip"
+      label: "Provider 3"
+    - id: "SIP3"
+      type: "sip"
+      label: "Provider 4"
+    - id: "SIP4"
+      type: "sip"
+      label: "VoIP Provider"
+
+  msns:
+    - number: "100001"
+      label: "Hauptanschluss"
+    - number: "100002"
+      label: "Zweitanschluss"
+    - number: "100003"
+      label: "Homeoffice 1"
+    - number: "100004"
+      label: "Fax"
+    - number: "100005"
+      label: "Homeoffice 2"
+
+  devices:
+    - id: "600"
+      extension: "**600"
+      name: "Anrufbeantworter 1"
+      type: "voicebox"
+    - id: "601"
+      extension: "**601"
+      name: "Anrufbeantworter 2"
+      type: "voicebox"
+    - id: "602"
+      extension: "**602"
+      name: "Anrufbeantworter 3"
+      type: "voicebox"
+    - id: "610"
+      extension: "**610"
+      name: "Telefon Wohnzimmer"
+      type: "dect"
+    - id: "611"
+      extension: "**611"
+      name: "Telefon Flur"
+      type: "dect"
+    - id: "612"
+      extension: "**612"
+      name: "Telefon Kueche"
+      type: "dect"
+    - id: "613"
+      extension: "**613"
+      name: "Telefon Schlafzimmer"
+      type: "dect"
+    - id: "614"
+      extension: "**614"
+      name: "Telefon Buero"
+      type: "dect"
+    - id: "615"
+      extension: "**615"
+      name: "Telefon Keller"
+      type: "dect"
+    - id: "620"
+      extension: "**620"
+      name: "VoIP Buero"
+      type: "voip"
+    - id: "621"
+      extension: "**621"
+      name: "VoIP Wohnzimmer"
+      type: "voip"
+    - id: "623"
+      extension: "**623"
+      name: "VoIP Homeoffice"
+      type: "voip"
+
+input_adapters:
+  - type: "fritz"
+    name: "fritz"
+    enabled: true
+    config:
+      host: "192.168.178.1"
+      port: 1012
+      reconnect_delay: 10
+  - type: "rest"
+    name: "rest"
+    enabled: true
+  - type: "mqtt"
+    name: "mqtt"
+    enabled: false
+    config:
+      broker: "homeassistant"
+      port: 1883
+      username: ""
+      password: ""
+      client_id: "phone-logger-sub"
+      topic_prefix: "phone-logger"
+      qos: 1
+      keep_alive: 60
+      connect_timeout: 30
+      reconnect_delay: 10
+
+resolver_adapters:
+  - type: "json_file"
+    name: "json_file"
+    enabled: true
+    config:
+      path: "contacts.json"
+  - type: "sqlite"
+    name: "sqlite"
+    enabled: true
+  - type: "tellows"
+    name: "tellows"
+    enabled: true
+    config:
+      ttl_days: 7
+  - type: "dastelefon"
+    name: "dastelefon"
+    enabled: false
+    config:
+      ttl_days: 30
+  - type: "klartelbuch"
+    name: "klartelbuch"
+    enabled: false
+    config:
+      ttl_days: 30
+
+output_adapters:
+  - type: "call_log"
+    name: "Call Log"
+    enabled: true
+    config:
+      history_size: 50
+  - type: "webhook"
+    name: "HA Webhook"
+    enabled: true
+    config:
+      url: "https://webhook.site/REPLACE-WITH-YOUR-UUID"
+      token: ""
+      events:
+        # Raw input events (from adapter):
+        - ring
+        - call
+        - connect
+        - disconnect
+        # FSM line states (state: prefix):
+        - state:talking
+        - state:finished
+        - state:missed
+        - state:notReached
+        - state:idle
+  - type: "webhook"
+    name: "Monitoring Webhook"
+    enabled: false
+    config:
+      url: ""
+      token: ""
+      events:
+        - state:missed
+        - state:notReached
+  - type: "mqtt"
+    name: "mqtt"
+    enabled: true
+    config:
+      broker: "homeassistant"
+      port: 1883
+      username: ""
+      password: ""
+      client_id: "phone-logger-pub"
+      topic_prefix: "phone-logger"
+      qos: 1
+      retain: true
+      keep_alive: 60
+      connect_timeout: 30

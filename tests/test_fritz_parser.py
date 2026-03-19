@@ -66,14 +66,14 @@ class TestFritzParser:
 
     def test_parse_anonymous_ring(self):
         """Anonymous inbound call (withheld number) — empty caller field."""
-        line = "18.03.26 22:35:21;RING;0;;061813698237;SIP4;"
+        line = "18.03.26 22:35:21;RING;0;;06301234567;SIP4;"
         event = FritzCallmonitorAdapter._parse_line(line)
 
         assert event is not None
         assert event.event_type == CallEventType.RING
         assert event.number == "anonymous"
         assert event.caller_number == "anonymous"
-        assert event.called_number == "061813698237"
+        assert event.called_number == "06301234567"
         assert event.direction == CallDirection.INBOUND
         assert event.trunk_id == "SIP4"
 
@@ -85,8 +85,8 @@ class TestFritzParser:
 
     def test_parse_normal_ring_unchanged(self):
         """Non-anonymous RING still works as before."""
-        line = "15.03.26 10:15:00;RING;0;01783278576;061813698237;SIP4;"
+        line = "15.03.26 10:15:00;RING;0;01701234567;06301234567;SIP4;"
         event = FritzCallmonitorAdapter._parse_line(line)
         assert event is not None
-        assert event.number == "01783278576"
-        assert event.caller_number == "01783278576"
+        assert event.number == "01701234567"
+        assert event.caller_number == "01701234567"

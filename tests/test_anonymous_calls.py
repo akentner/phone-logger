@@ -29,37 +29,37 @@ async def test_db():
 class TestAnonymousFritzParsing:
     def test_anonymous_ring_returns_event_not_none(self):
         """Critical regression: anonymous RING must not be dropped."""
-        line = "18.03.26 22:35:21;RING;0;;061813698237;SIP4;"
+        line = "18.03.26 22:35:21;RING;0;;06301234567;SIP4;"
         event = FritzCallmonitorAdapter._parse_line(line)
         assert event is not None
 
     def test_anonymous_ring_number_is_sentinel(self):
-        line = "18.03.26 22:35:21;RING;0;;061813698237;SIP4;"
+        line = "18.03.26 22:35:21;RING;0;;06301234567;SIP4;"
         event = FritzCallmonitorAdapter._parse_line(line)
         assert event.number == ANONYMOUS
 
     def test_anonymous_ring_caller_number_is_sentinel(self):
-        line = "18.03.26 22:35:21;RING;0;;061813698237;SIP4;"
+        line = "18.03.26 22:35:21;RING;0;;06301234567;SIP4;"
         event = FritzCallmonitorAdapter._parse_line(line)
         assert event.caller_number == ANONYMOUS
 
     def test_anonymous_ring_called_number_preserved(self):
-        line = "18.03.26 22:35:21;RING;0;;061813698237;SIP4;"
+        line = "18.03.26 22:35:21;RING;0;;06301234567;SIP4;"
         event = FritzCallmonitorAdapter._parse_line(line)
-        assert event.called_number == "061813698237"
+        assert event.called_number == "06301234567"
 
     def test_anonymous_ring_trunk_preserved(self):
-        line = "18.03.26 22:35:21;RING;0;;061813698237;SIP4;"
+        line = "18.03.26 22:35:21;RING;0;;06301234567;SIP4;"
         event = FritzCallmonitorAdapter._parse_line(line)
         assert event.trunk_id == "SIP4"
         assert event.connection_id == "0"
 
     def test_normal_ring_unaffected(self):
         """Ensure non-anonymous numbers still parse correctly."""
-        line = "18.03.26 22:35:21;RING;0;01783278576;061813698237;SIP4;"
+        line = "18.03.26 22:35:21;RING;0;01701234567;06301234567;SIP4;"
         event = FritzCallmonitorAdapter._parse_line(line)
-        assert event.number == "01783278576"
-        assert event.caller_number == "01783278576"
+        assert event.number == "01701234567"
+        assert event.caller_number == "01701234567"
 
 
 # --- Phone number normalization ---
@@ -75,8 +75,8 @@ class TestAnonymousNormalization:
         assert result == ""
 
     def test_normal_number_unaffected(self):
-        result = normalize("01783278576", country_code="49")
-        assert result == "+491783278576"
+        result = normalize("01701234567", country_code="49")
+        assert result == "+491701234567"
 
 
 # --- Pipeline resolve result ---
@@ -108,7 +108,7 @@ async def test_anonymous_ring_creates_call_record(test_db):
         event_type=CallEventType.RING,
         connection_id="5",
         caller_number=ANONYMOUS,
-        called_number="+4961813698237",
+        called_number="+496301234567",
         trunk_id="SIP4",
         line_id=0,
     )
@@ -140,7 +140,7 @@ async def test_anonymous_missed_call_lifecycle(test_db):
         event_type=CallEventType.RING,
         connection_id="6",
         caller_number=ANONYMOUS,
-        called_number="+4961813698237",
+        called_number="+496301234567",
     )
     disconnect = CallEvent(
         number="",

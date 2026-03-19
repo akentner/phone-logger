@@ -30,7 +30,7 @@ class PhoneConfig(BaseModel):
     """Default country code without leading +/00 (e.g. '49' for Germany)."""
 
     local_area_code: str = ""
-    """Local area code without leading 0 (e.g. '6181' for Hanau).
+    """Local area code without leading 0 (e.g. '30' for Berlin).
     Required to expand short local numbers that arrive without area code."""
 
 
@@ -72,7 +72,7 @@ class TrunkConfig(BaseModel):
 class MsnConfig(BaseModel):
     """Configuration for an MSN (subscriber number without area code)."""
 
-    number: str  # e.g. "990133" — resolved to E.164 via PhoneConfig at runtime
+    number: str  # e.g. "123456" — resolved to E.164 via PhoneConfig at runtime
     label: str = ""
 
 
@@ -105,25 +105,76 @@ class AppConfig(BaseModel):
     phone: PhoneConfig = Field(default_factory=PhoneConfig)
     pbx: PbxConfig = Field(default_factory=PbxConfig)
 
-    input_adapters: list[AdapterConfig] = Field(default_factory=lambda: [
-        AdapterConfig(type="fritz", name="fritz", enabled=True, config={"host": "192.168.178.1", "port": 1012}),
-        AdapterConfig(type="rest", name="rest", enabled=True),
-        AdapterConfig(type="mqtt", name="mqtt", enabled=False, config={"broker": "homeassistant", "port": 1883, "topic_prefix": "phone-logger"}),
-    ])
+    input_adapters: list[AdapterConfig] = Field(
+        default_factory=lambda: [
+            AdapterConfig(
+                type="fritz",
+                name="fritz",
+                enabled=True,
+                config={"host": "192.168.178.1", "port": 1012},
+            ),
+            AdapterConfig(type="rest", name="rest", enabled=True),
+            AdapterConfig(
+                type="mqtt",
+                name="mqtt",
+                enabled=False,
+                config={
+                    "broker": "homeassistant",
+                    "port": 1883,
+                    "topic_prefix": "phone-logger",
+                },
+            ),
+        ]
+    )
 
-    resolver_adapters: list[AdapterConfig] = Field(default_factory=lambda: [
-        AdapterConfig(type="json_file", name="json_file", enabled=True, config={"path": "contacts.json"}),
-        AdapterConfig(type="sqlite", name="sqlite", enabled=True),
-        AdapterConfig(type="tellows", name="tellows", enabled=True, config={"ttl_days": 7}),
-        AdapterConfig(type="dastelefon", name="dastelefon", enabled=True, config={"ttl_days": 30}),
-        AdapterConfig(type="klartelbuch", name="klartelbuch", enabled=False, config={"ttl_days": 30}),
-    ])
+    resolver_adapters: list[AdapterConfig] = Field(
+        default_factory=lambda: [
+            AdapterConfig(
+                type="json_file",
+                name="json_file",
+                enabled=True,
+                config={"path": "contacts.json"},
+            ),
+            AdapterConfig(type="sqlite", name="sqlite", enabled=True),
+            AdapterConfig(
+                type="tellows", name="tellows", enabled=True, config={"ttl_days": 7}
+            ),
+            AdapterConfig(
+                type="dastelefon",
+                name="dastelefon",
+                enabled=True,
+                config={"ttl_days": 30},
+            ),
+            AdapterConfig(
+                type="klartelbuch",
+                name="klartelbuch",
+                enabled=False,
+                config={"ttl_days": 30},
+            ),
+        ]
+    )
 
-    output_adapters: list[AdapterConfig] = Field(default_factory=lambda: [
-        AdapterConfig(type="call_log", name="call_log", enabled=True),
-        AdapterConfig(type="webhook", name="webhook", enabled=True, config={"url": "", "token": "", "events": ["ring", "call", "connect", "disconnect"]}),
-        AdapterConfig(type="mqtt", name="mqtt", enabled=False, config={"broker": "homeassistant", "topic_prefix": "phone-logger"}),
-    ])
+    output_adapters: list[AdapterConfig] = Field(
+        default_factory=lambda: [
+            AdapterConfig(type="call_log", name="call_log", enabled=True),
+            AdapterConfig(
+                type="webhook",
+                name="webhook",
+                enabled=True,
+                config={
+                    "url": "",
+                    "token": "",
+                    "events": ["ring", "call", "connect", "disconnect"],
+                },
+            ),
+            AdapterConfig(
+                type="mqtt",
+                name="mqtt",
+                enabled=False,
+                config={"broker": "homeassistant", "topic_prefix": "phone-logger"},
+            ),
+        ]
+    )
 
     @property
     def db_path(self) -> str:
@@ -136,7 +187,11 @@ class AppConfig(BaseModel):
         json_config = next(
             (a for a in self.resolver_adapters if a.name == "json_file"), None
         )
-        filename = json_config.config.get("path", "contacts.json") if json_config else "contacts.json"
+        filename = (
+            json_config.config.get("path", "contacts.json")
+            if json_config
+            else "contacts.json"
+        )
         return str(Path(self.data_path) / filename)
 
 
@@ -169,7 +224,7 @@ def _load_from_yaml(path: str) -> AppConfig:
 
 def _load_from_json(path: str) -> AppConfig:
     """Load config from JSON file (HA addon options).
-    
+
     HA options supports a separate 'webhooks' list. Bridge it into
     the output_adapters list as independent webhook instances.
     """
@@ -178,24 +233,31 @@ def _load_from_json(path: str) -> AppConfig:
     logger.info("Loading configuration from %s", path)
     with open(path) as f:
         data = json.load(f)
-    
+
     # Bridge: convert HA-format "webhooks" list → output_adapter entries
     webhooks = data.pop("webhooks", [])
     if webhooks:
         output_adapters = data.setdefault("output_adapters", [])
         for i, wh in enumerate(webhooks):
             if wh.get("url"):  # Only add webhook if URL is configured
-                webhook_name = wh.get("name") or f"webhook-{i+1}"
-                output_adapters.append({
-                    "type": "webhook",
-                    "name": webhook_name,
-                    "enabled": True,
-                    "config": {
-                        "url": wh.get("url"),
-                        "token": wh.get("token", ""),
-                        "events": wh.get("events", ["ring", "call", "connect", "disconnect"]),
+                webhook_name = wh.get("name") or f"webhook-{i + 1}"
+                output_adapters.append(
+                    {
+                        "type": "webhook",
+                        "name": webhook_name,
+                        "enabled": True,
+                        "config": {
+                            "url": wh.get("url"),
+                            "token": wh.get("token", ""),
+                            "events": wh.get(
+                                "events", ["ring", "call", "connect", "disconnect"]
+                            ),
+                        },
                     }
-                })
-        logger.info("Bridged %d webhook(s) from HA options into output_adapters", len([w for w in webhooks if w.get("url")]))
-    
+                )
+        logger.info(
+            "Bridged %d webhook(s) from HA options into output_adapters",
+            len([w for w in webhooks if w.get("url")]),
+        )
+
     return AppConfig(**data)
