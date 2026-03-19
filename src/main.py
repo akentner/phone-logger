@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 
 import uvicorn
 
@@ -72,8 +73,24 @@ def create_application():
     # Create pipeline
     _pipeline = Pipeline(_config, _db)
 
-    # Create FastAPI app
-    app = create_app()
+    # Create FastAPI app with lifespan handlers (preferred over @app.on_event)
+    @asynccontextmanager
+    async def _lifespan():
+        logger.info("Starting up...")
+        await _db.connect()
+        await _pipeline.setup()
+        await _pipeline.start()
+        logger.info("phone-logger ready!")
+        try:
+            yield
+        finally:
+            logger.info("Shutting down...")
+            await _pipeline.stop()
+            await _db.close()
+            logger.info("phone-logger stopped")
+
+    # Create FastAPI app and provide lifespan context
+    app = create_app(lifespan=_lifespan())
 
     # Register API routes
     app.include_router(resolve.router)
@@ -87,20 +104,6 @@ def create_application():
     # Register GUI routes
     app.include_router(gui_router)
 
-    @app.on_event("startup")
-    async def startup():
-        logger.info("Starting up...")
-        await _db.connect()
-        await _pipeline.setup()
-        await _pipeline.start()
-        logger.info("phone-logger ready!")
-
-    @app.on_event("shutdown")
-    async def shutdown():
-        logger.info("Shutting down...")
-        await _pipeline.stop()
-        await _db.close()
-        logger.info("phone-logger stopped")
 
     return app
 
