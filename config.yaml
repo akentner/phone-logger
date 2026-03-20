@@ -2,10 +2,9 @@
 name: "phone-logger"
 description: "Phone number resolver with Fritz!Box Callmonitor integration"
 url: "https://github.com/akentner/phone-logger"
-version: "0.1.3"
+version: "0.1.4"
 slug: "phone-logger"
 arch:
-  - aarch64
   - amd64
 init: false
 ingress: true
