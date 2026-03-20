@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.1 - 2026-03-20
+
+### Features
+- **Dark mode** support via CSS `prefers-color-scheme`
+
+### Fixes
+- FastAPI lifespan handler corrected (callable now accepts `app` parameter)
+
+### Refactoring
+- `LineConfig` removed — line count is now derived directly from configured trunks
+- Translations are no longer reloaded on PBX auto-refresh polling
+
+### Documentation
+- Added `AGENTS.md` (English)
+- Fixed ASCII art alignment in README
+
 ## 0.1.0 - Initial Release
 
 ### Features
