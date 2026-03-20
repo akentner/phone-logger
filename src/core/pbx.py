@@ -165,19 +165,19 @@ class PbxStateManager:
             self._msn_e164_set.add(e164)
             self._msn_e164_map[msn.number] = e164
 
-        # Initialize line FSMs and states
+        # Initialize line FSMs and states — one line per trunk (0-indexed)
         self._fsms: dict[int, LineFSM] = {}
         self._states: dict[int, LineState] = {}
-        for line_cfg in config.lines:
-            self._fsms[line_cfg.id] = LineFSM(line_cfg.id)
-            self._states[line_cfg.id] = LineState(line_id=line_cfg.id)
+        for i in range(len(config.trunks)):
+            self._fsms[i] = LineFSM(i)
+            self._states[i] = LineState(line_id=i)
 
         # Pending auto-reset tasks for terminal states
         self._reset_tasks: dict[int, asyncio.Task] = {}
 
         logger.info(
             "PBX initialized: %d lines, %d trunks, %d MSNs, %d devices",
-            len(config.lines),
+            len(config.trunks),
             len(config.trunks),
             len(config.msns),
             len(config.devices),

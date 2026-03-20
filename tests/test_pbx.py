@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from src.config import DeviceConfig, DeviceType, LineConfig, MsnConfig, PbxConfig, PhoneConfig, TrunkConfig, TrunkType
+from src.config import DeviceConfig, DeviceType, MsnConfig, PbxConfig, PhoneConfig, TrunkConfig, TrunkType
 from src.core.event import CallDirection, CallEvent, CallEventType
 from src.core.pbx import LineFSM, LineStatus, PbxStateManager
 
@@ -132,10 +132,10 @@ class TestLineFSM:
 def _make_pbx_config() -> PbxConfig:
     """Create a test PBX config."""
     return PbxConfig(
-        lines=[LineConfig(id=0), LineConfig(id=1), LineConfig(id=2)],
         trunks=[
             TrunkConfig(id="SIP0", type=TrunkType.SIP, label="Internet 1"),
             TrunkConfig(id="SIP1", type=TrunkType.SIP, label="Internet 2"),
+            TrunkConfig(id="SIP2", type=TrunkType.SIP, label="Internet 3"),
         ],
         msns=[
             MsnConfig(number="990133", label="Hauptnummer"),
@@ -337,7 +337,7 @@ class TestPbxStateManager:
         assert "msns" in status
         assert "devices" in status
         assert len(status["lines"]) == 3
-        assert len(status["trunks"]) == 2
+        assert len(status["trunks"]) == 3
 
     def test_unconfigured_line_ignored(self):
         """Events for unconfigured lines should be silently ignored."""

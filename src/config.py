@@ -55,12 +55,6 @@ class DeviceType(str, Enum):
     VOICEBOX = "voicebox"
 
 
-class LineConfig(BaseModel):
-    """Configuration for a PBX line (concurrent call slot)."""
-
-    id: int
-
-
 class TrunkConfig(BaseModel):
     """Configuration for a PBX trunk (external connection)."""
 
@@ -88,7 +82,6 @@ class DeviceConfig(BaseModel):
 class PbxConfig(BaseModel):
     """PBX infrastructure configuration."""
 
-    lines: list[LineConfig] = Field(default_factory=list)
     trunks: list[TrunkConfig] = Field(default_factory=list)
     msns: list[MsnConfig] = Field(default_factory=list)
     devices: list[DeviceConfig] = Field(default_factory=list)

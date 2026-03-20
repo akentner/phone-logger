@@ -18,8 +18,8 @@ from src.config import (
     AppConfig,
     PhoneConfig,
     PbxConfig,
-    LineConfig,
     MsnConfig,
+    TrunkConfig,
 )
 
 
@@ -30,15 +30,14 @@ def phone_config():
 
 @pytest.fixture
 def pbx_config():
-    # Configure lines 1-6 for tests
     return PbxConfig(
-        lines=[
-            LineConfig(id=1),
-            LineConfig(id=2),
-            LineConfig(id=3),
-            LineConfig(id=4),
-            LineConfig(id=5),
-            LineConfig(id=6),
+        trunks=[
+            TrunkConfig(id="SIP0"),
+            TrunkConfig(id="SIP1"),
+            TrunkConfig(id="SIP2"),
+            TrunkConfig(id="SIP3"),
+            TrunkConfig(id="SIP4"),
+            TrunkConfig(id="SIP5"),
         ],
         msns=[
             MsnConfig(number="990133", label="Zentrale"),

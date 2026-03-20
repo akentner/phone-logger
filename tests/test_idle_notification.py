@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 from src.config import (
     AppConfig,
-    LineConfig,
     MsnConfig,
     PbxConfig,
     PhoneConfig,
+    TrunkConfig,
 )
 from src.core.event import CallDirection, CallEvent, CallEventType
 from src.core.pbx import LineState, LineStatus, PbxStateManager
@@ -24,7 +24,7 @@ from src.core.pipeline import Pipeline
 async def test_on_state_change_called_after_auto_reset():
     """on_state_change callback should fire with idle state after terminal auto-reset."""
     callback = AsyncMock()
-    config = PbxConfig(lines=[LineConfig(id=0)])
+    config = PbxConfig(trunks=[TrunkConfig(id="SIP0")])
     phone = PhoneConfig(country_code="49", local_area_code="6181")
     pbx = PbxStateManager(config, phone, on_state_change=callback)
 
@@ -71,7 +71,7 @@ async def test_on_state_change_called_after_auto_reset():
 @pytest.mark.asyncio
 async def test_no_callback_when_not_configured():
     """No crash when on_state_change is None."""
-    config = PbxConfig(lines=[LineConfig(id=0)])
+    config = PbxConfig(trunks=[TrunkConfig(id="SIP0")])
     phone = PhoneConfig(country_code="49", local_area_code="6181")
     pbx = PbxStateManager(config, phone)  # No callback
 
@@ -106,7 +106,7 @@ async def test_no_callback_when_not_configured():
 async def test_callback_error_does_not_break_reset():
     """If callback raises, line should still be reset to idle."""
     callback = AsyncMock(side_effect=RuntimeError("boom"))
-    config = PbxConfig(lines=[LineConfig(id=0)])
+    config = PbxConfig(trunks=[TrunkConfig(id="SIP0")])
     phone = PhoneConfig(country_code="49", local_area_code="6181")
     pbx = PbxStateManager(config, phone, on_state_change=callback)
 
@@ -145,7 +145,7 @@ async def test_callback_error_does_not_break_reset():
 async def test_pipeline_dispatches_idle_to_output_adapters():
     """After terminal state auto-reset, output adapters should receive idle notification."""
     phone = PhoneConfig(country_code="49", local_area_code="6181")
-    pbx_config = PbxConfig(lines=[LineConfig(id=0)])
+    pbx_config = PbxConfig(trunks=[TrunkConfig(id="SIP0")])
     config = AppConfig(
         phone=phone,
         pbx=pbx_config,
