@@ -5,7 +5,7 @@ on:
     types: [published]
 
 env:
-  ARCHITECTURES: '["amd64", "aarch64", "armv7", "armhf", "i386"]'
+  ARCHITECTURES: '["amd64", "aarch64"]'
   IMAGE_NAME: phone-logger
 
 permissions:
