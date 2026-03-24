@@ -36,7 +36,9 @@ def _serialize_line_state(line_state: Optional["LineState"]) -> Optional[dict]:
         "caller_device": _device_dict(line_state.caller_device),
         "called_device": _device_dict(line_state.called_device),
         "is_internal": line_state.is_internal,
-        "since": line_state.since.isoformat() if line_state.since else None,
+        "last_changed": line_state.last_changed.isoformat()
+        if line_state.last_changed
+        else None,
     }
 
 

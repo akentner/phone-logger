@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.adapters.output.webhook import WebhookOutputAdapter, _serialize_line_state
-from src.adapters.output.mqtt_pub import (
-    MqttPublisherOutputAdapter,
+from src.adapters.mqtt import (
+    MqttAdapter,
     _serialize_line_state as mqtt_serialize_line_state,
 )
 from src.config import AdapterConfig
@@ -20,6 +20,18 @@ from src.core.event import (
     ResolveResult,
 )
 from src.core.pbx import LineState, LineStatus
+
+
+def _inject_fake_client(adapter: MqttAdapter):
+    """Inject a pre-built FakeClient into the adapter and return the published list."""
+    published = {}
+
+    class FakeClient:
+        async def publish(self, topic, message, **kwargs):
+            published[topic] = (message, kwargs)
+
+    adapter._client = FakeClient()
+    return published
 
 
 # --- Fixtures ---
@@ -50,7 +62,7 @@ def _make_line_state(**overrides) -> LineState:
         "direction": CallDirection.INBOUND,
         "trunk_id": "SIP0",
         "is_internal": False,
-        "since": datetime(2026, 3, 19, 10, 0, 0, tzinfo=UTC),
+        "last_changed": datetime(2026, 3, 19, 10, 0, 0, tzinfo=UTC),
     }
     defaults.update(overrides)
     return LineState(**defaults)
@@ -79,7 +91,7 @@ class TestSerializeLineState:
         assert result["direction"] == "inbound"
         assert result["trunk_id"] == "SIP0"
         assert result["is_internal"] is False
-        assert result["since"] == "2026-03-19T10:00:00+00:00"
+        assert result["last_changed"] == "2026-03-19T10:00:00+00:00"
 
     def test_device_serialized(self):
         device = DeviceInfo(id="1", extension="10", name="Telefon Flur", type="dect")
@@ -105,9 +117,9 @@ class TestSerializeLineState:
         assert result["direction"] is None
 
     def test_since_none(self):
-        ls = _make_line_state(since=None)
+        ls = _make_line_state(last_changed=None)
         result = _serialize_line_state(ls)
-        assert result["since"] is None
+        assert result["last_changed"] is None
 
     def test_mqtt_serializer_same_output(self):
         """Both webhook and MQTT use identical serialization logic."""
@@ -191,15 +203,8 @@ class TestWebhookLineState:
 # --- MQTT: line_state in event payload + dedicated topic ---
 
 
-def _fake_aiomqtt_module(fake_client_cls):
-    """Create a mock aiomqtt module whose Client() returns a fake_client_cls instance."""
-    mock_module = MagicMock()
-    mock_module.Client = MagicMock(return_value=fake_client_cls())
-    return mock_module
-
-
 class TestMqttLineState:
-    def _make_adapter(self) -> MqttPublisherOutputAdapter:
+    def _make_adapter(self) -> MqttAdapter:
         config = AdapterConfig(
             type="mqtt",
             name="test",
@@ -210,7 +215,7 @@ class TestMqttLineState:
                 "topic_prefix": "phone-logger",
             },
         )
-        return MqttPublisherOutputAdapter(config)
+        return MqttAdapter(config)
 
     @pytest.mark.asyncio
     async def test_event_payload_includes_line_state(self):
@@ -219,24 +224,13 @@ class TestMqttLineState:
         event = _make_event()
         ls = _make_line_state()
 
-        published = {}
+        published = _inject_fake_client(adapter)
 
-        class FakeClient:
-            async def publish(self, topic, message, **kwargs):
-                published[topic] = message
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                pass
-
-        with patch.dict(sys.modules, {"aiomqtt": _fake_aiomqtt_module(FakeClient)}):
-            await adapter.handle(event, None, line_state=ls)
+        await adapter.handle(event, None, line_state=ls)
 
         import json
 
-        event_payload = json.loads(published["phone-logger/event"])
+        event_payload = json.loads(published["phone-logger/event"][0])
         assert "line_state" in event_payload
         assert event_payload["line_state"]["status"] == "ring"
         assert event_payload["line_state"]["line_id"] == 0
@@ -248,20 +242,9 @@ class TestMqttLineState:
         event = _make_event()
         ls = _make_line_state(status=LineStatus.RING)
 
-        published = {}
+        published = _inject_fake_client(adapter)
 
-        class FakeClient:
-            async def publish(self, topic, message, **kwargs):
-                published[topic] = (message, kwargs)
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                pass
-
-        with patch.dict(sys.modules, {"aiomqtt": _fake_aiomqtt_module(FakeClient)}):
-            await adapter.handle(event, None, line_state=ls)
+        await adapter.handle(event, None, line_state=ls)
 
         assert "phone-logger/line/0/state" in published
         import json
@@ -278,39 +261,17 @@ class TestMqttLineState:
         event = _make_event()
         ls = _make_line_state(status=LineStatus.RING)
 
-        class FakeClient:
-            async def publish(self, topic, message, **kwargs):
-                pass
+        # First call: status changes from <none> to ring
+        published = _inject_fake_client(adapter)
+        await adapter.handle(event, None, line_state=ls)
+        assert "phone-logger/line/0/state" in published
 
-            async def __aenter__(self):
-                return self
+        # Second call with same status — state topic should NOT appear
+        published.clear()
+        await adapter.handle(event, None, line_state=ls)
 
-            async def __aexit__(self, *args):
-                pass
-
-        with patch.dict(sys.modules, {"aiomqtt": _fake_aiomqtt_module(FakeClient)}):
-            # First call: status changes from <none> to ring
-            await adapter.handle(event, None, line_state=ls)
-
-        # Second call with same status
-        published_topics = []
-
-        class TrackingClient:
-            async def publish(self, topic, message, **kwargs):
-                published_topics.append(topic)
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                pass
-
-        with patch.dict(sys.modules, {"aiomqtt": _fake_aiomqtt_module(TrackingClient)}):
-            await adapter.handle(event, None, line_state=ls)
-
-        # Event topics published, but NOT the line state topic
-        assert "phone-logger/event" in published_topics
-        assert "phone-logger/line/0/state" not in published_topics
+        assert "phone-logger/event" in published
+        assert "phone-logger/line/0/state" not in published
 
     @pytest.mark.asyncio
     async def test_line_state_topic_published_on_transition(self):
@@ -321,28 +282,17 @@ class TestMqttLineState:
         ls_ring = _make_line_state(status=LineStatus.RING)
         ls_talking = _make_line_state(status=LineStatus.TALKING)
 
-        published_topics = []
+        published = _inject_fake_client(adapter)
 
-        class TrackingClient:
-            async def publish(self, topic, message, **kwargs):
-                published_topics.append(topic)
+        # RING -> state published (new)
+        await adapter.handle(event_ring, None, line_state=ls_ring)
+        assert "phone-logger/line/0/state" in published
 
-            async def __aenter__(self):
-                return self
+        published.clear()
 
-            async def __aexit__(self, *args):
-                pass
-
-        with patch.dict(sys.modules, {"aiomqtt": _fake_aiomqtt_module(TrackingClient)}):
-            # RING -> state published (new)
-            await adapter.handle(event_ring, None, line_state=ls_ring)
-            assert "phone-logger/line/0/state" in published_topics
-
-            published_topics.clear()
-
-            # CONNECT -> state published (ring -> talking)
-            await adapter.handle(event_connect, None, line_state=ls_talking)
-            assert "phone-logger/line/0/state" in published_topics
+        # CONNECT -> state published (ring -> talking)
+        await adapter.handle(event_connect, None, line_state=ls_talking)
+        assert "phone-logger/line/0/state" in published
 
     @pytest.mark.asyncio
     async def test_no_line_state_no_crash(self):
@@ -350,20 +300,9 @@ class TestMqttLineState:
         adapter = self._make_adapter()
         event = _make_event()
 
-        published_topics = []
+        published = _inject_fake_client(adapter)
 
-        class TrackingClient:
-            async def publish(self, topic, message, **kwargs):
-                published_topics.append(topic)
+        await adapter.handle(event, None, line_state=None)
 
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                pass
-
-        with patch.dict(sys.modules, {"aiomqtt": _fake_aiomqtt_module(TrackingClient)}):
-            await adapter.handle(event, None, line_state=None)
-
-        assert "phone-logger/event" in published_topics
-        assert not any("line" in t for t in published_topics)
+        assert "phone-logger/event" in published
+        assert not any("line" in t for t in published)

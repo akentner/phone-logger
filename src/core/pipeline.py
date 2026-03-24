@@ -23,7 +23,7 @@ from src.db.database import Database
 # Import all adapter implementations
 from src.adapters.input.fritz_callmonitor import FritzCallmonitorAdapter
 from src.adapters.input.rest import RestInputAdapter
-from src.adapters.input.mqtt_sub import MqttInputAdapter
+from src.adapters.mqtt import MqttAdapter
 from src.adapters.resolver.json_file import JsonFileResolver
 from src.adapters.resolver.sqlite_db import SqliteResolver
 from src.adapters.resolver.tellows import TellowsResolver
@@ -32,7 +32,6 @@ from src.adapters.resolver.klartelbuch import KlarTelefonbuchResolver
 from src.adapters.resolver.msn import MsnResolver
 from src.adapters.output.call_log import CallLogOutputAdapter
 from src.adapters.output.webhook import WebhookOutputAdapter
-from src.adapters.output.mqtt_pub import MqttPublisherOutputAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +53,7 @@ class Pipeline:
         self._input_adapters: list[BaseInputAdapter] = []
         self._output_adapters: list[BaseOutputAdapter] = []
         self._rest_input: Optional[RestInputAdapter] = None
+        self._mqtt_adapters: dict[str, MqttAdapter] = {}
         self._resolve_cache: dict[
             int, ResolveResult
         ] = {}  # Cache per line_id for CONNECT/DISCONNECT
@@ -354,7 +354,8 @@ class Pipeline:
                 self._input_adapters.append(adapter)
 
             elif adapter_config.name == "mqtt":
-                adapter = MqttInputAdapter(adapter_config)
+                adapter = MqttAdapter(adapter_config, self.config, self.pbx)
+                self._mqtt_adapters[adapter_config.name] = adapter
                 self._input_adapters.append(adapter)
 
             else:
@@ -394,7 +395,12 @@ class Pipeline:
                 self._output_adapters.append(adapter)
 
             elif adapter_type == "mqtt":
-                adapter = MqttPublisherOutputAdapter(adapter_config)
+                # Reuse existing MqttAdapter instance (same connection) if input
+                # with the same name was already set up, otherwise create output-only.
+                adapter = self._mqtt_adapters.get(adapter_config.name)
+                if adapter is None:
+                    adapter = MqttAdapter(adapter_config, self.config, self.pbx)
+                    self._mqtt_adapters[adapter_config.name] = adapter
                 self._output_adapters.append(adapter)
 
             else:

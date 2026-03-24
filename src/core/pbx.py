@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from collections.abc import Awaitable, Callable
 from typing import Optional
@@ -45,7 +45,7 @@ class LineState(BaseModel):
     caller_device: Optional[DeviceInfo] = None
     called_device: Optional[DeviceInfo] = None
     is_internal: bool = False
-    since: Optional[datetime] = None
+    last_changed: Optional[datetime] = None
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -368,10 +368,11 @@ class PbxStateManager:
             state.is_internal = self._is_internal(
                 event.caller_number, event.called_number
             )
-            state.since = event.timestamp
+            state.last_changed = event.timestamp
         elif new_status == LineStatus.TALKING:
             # On CONNECT we may learn the answering device — update if provided
             state.status = new_status
+            state.last_changed = event.timestamp
             if event.caller_device:
                 state.caller_device = event.caller_device
             if event.called_device:
@@ -379,6 +380,7 @@ class PbxStateManager:
         else:
             # FINISHED, MISSED, NOT_REACHED — just update status
             state.status = new_status
+            state.last_changed = event.timestamp
 
         # Schedule auto-reset for terminal states
         if new_status in TERMINAL_STATES:
@@ -402,6 +404,8 @@ class PbxStateManager:
             if self._on_state_change:
                 idle_state = self._states.get(line_id)
                 if idle_state:
+                    # Stamp when the line became idle
+                    idle_state.last_changed = datetime.now(UTC)
                     try:
                         await self._on_state_change(line_id, idle_state)
                     except Exception:

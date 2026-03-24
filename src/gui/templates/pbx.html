@@ -118,7 +118,7 @@
                 const callerDevice = line.caller_device ? `<div class="pbx-line-device">${t('pbx.caller_device')}: ${line.caller_device.name} (${t(`device_type.${line.caller_device.type}`) || line.caller_device.type})</div>` : '';
                 const calledDevice = line.called_device ? `<div class="pbx-line-device">${t('pbx.called_device')}: ${line.called_device.name} (${t(`device_type.${line.called_device.type}`) || line.called_device.type})</div>` : '';
                 const trunk = line.trunk_id ? `<div class="pbx-line-trunk">Trunk: ${line.trunk_id}</div>` : '';
-                const since = line.since ? `<div class="pbx-line-since">seit ${formatTime(line.since)}</div>` : '';
+                const since = line.last_changed ? `<div class="pbx-line-since">seit ${formatTime(line.last_changed)}</div>` : '';
 
                 details = `
                     <div class="pbx-line-details">

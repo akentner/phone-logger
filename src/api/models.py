@@ -225,7 +225,7 @@ class LineStatusResponse(BaseModel):
     caller_device: Optional[DeviceInfoResponse] = None
     called_device: Optional[DeviceInfoResponse] = None
     is_internal: bool = False
-    since: Optional[datetime] = None
+    last_changed: Optional[datetime] = None
 
 
 class TrunkStatusResponse(BaseModel):
