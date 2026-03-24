@@ -2,7 +2,7 @@
 
 import pytest
 import tempfile
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src.core.utils import uuid7
@@ -67,13 +67,12 @@ async def test_upsert_call_create(test_db):
         called_number="+496181654321",
         direction="inbound",
         status="ringing",
-        device="DECT 1",
-        device_type="dect",
+        caller_device_id="10",
         msn="990133",
         trunk_id="ISDN0",
         line_id=0,
         is_internal=False,
-        started_at=datetime.now().isoformat(),
+        started_at=datetime.now(UTC).isoformat(),
     )
 
     # Retrieve the call
@@ -82,7 +81,7 @@ async def test_upsert_call_create(test_db):
     assert call["connection_id"] == 1
     assert call["caller_number"] == "+496181123456"
     assert call["status"] == "ringing"
-    assert call["device"] == "DECT 1"
+    assert call["caller_device_id"] == "10"
     assert call["is_internal"] is False
 
 
@@ -92,7 +91,7 @@ async def test_upsert_call_update(test_db):
     db = test_db
 
     call_id = uuid7()
-    started_at = datetime.now().isoformat()
+    started_at = datetime.now(UTC).isoformat()
 
     # Create initial call
     await db.upsert_call(
@@ -106,7 +105,7 @@ async def test_upsert_call_update(test_db):
     )
 
     # Update with connected_at
-    connected_at = datetime.now().isoformat()
+    connected_at = datetime.now(UTC).isoformat()
     await db.upsert_call(
         call_id=call_id,
         connection_id=1,
@@ -126,13 +125,16 @@ async def test_upsert_call_update(test_db):
 
 @pytest.mark.asyncio
 async def test_get_calls_pagination(test_db):
-    """Test getting calls with pagination."""
+    """Test cursor-based pagination for get_calls."""
     db = test_db
 
-    # Create multiple calls
+    # Create 5 calls
+    ids = []
     for i in range(5):
+        call_id = uuid7()
+        ids.append(call_id)
         await db.upsert_call(
-            call_id=uuid7(),
+            call_id=call_id,
             connection_id=i,
             caller_number=f"+496181{100000 + i}",
             called_number="+496181999999",
@@ -140,14 +142,21 @@ async def test_get_calls_pagination(test_db):
             status="answered",
         )
 
-    # Get first page
-    calls, total = await db.get_calls(page=1, page_size=2)
+    # First page (no cursor) — returns 2 newest rows, next_cursor points to 3rd
+    calls, next_cursor = await db.get_calls(limit=2)
     assert len(calls) == 2
-    assert total == 5
+    assert next_cursor is not None
 
-    # Get second page
-    calls, total = await db.get_calls(page=2, page_size=2)
-    assert len(calls) == 2
+    # Second page — use cursor from first page
+    calls2, next_cursor2 = await db.get_calls(cursor=next_cursor, limit=2)
+    assert len(calls2) == 2
+    # No overlap: IDs must be different from first page
+    assert {c["id"] for c in calls2}.isdisjoint({c["id"] for c in calls})
+
+    # Third page — only 1 row left, no further cursor
+    calls3, next_cursor3 = await db.get_calls(cursor=next_cursor2, limit=2)
+    assert len(calls3) == 1
+    assert next_cursor3 is None
 
 
 @pytest.mark.asyncio
@@ -177,13 +186,13 @@ async def test_get_calls_filter_by_direction(test_db):
         )
 
     # Filter by inbound
-    calls, total = await db.get_calls(direction="inbound")
-    assert total == 3
+    calls, _ = await db.get_calls(direction="inbound")
+    assert len(calls) == 3
     assert all(c["direction"] == "inbound" for c in calls)
 
     # Filter by outbound
-    calls, total = await db.get_calls(direction="outbound")
-    assert total == 2
+    calls, _ = await db.get_calls(direction="outbound")
+    assert len(calls) == 2
     assert all(c["direction"] == "outbound" for c in calls)
 
 
@@ -205,8 +214,8 @@ async def test_get_calls_filter_by_status(test_db):
         )
 
     # Filter by status
-    calls, total = await db.get_calls(status="answered")
-    assert total == 1
+    calls, _ = await db.get_calls(status="answered")
+    assert len(calls) == 1
     assert calls[0]["status"] == "answered"
 
 
@@ -253,8 +262,9 @@ async def test_call_log_adapter_raw_event(test_db):
     await adapter.handle(event, None)
 
     # Verify raw event was logged
-    calls, total = await db.get_call_log()
-    assert total == 1
+    calls, next_cursor = await db.get_call_log()
+    assert next_cursor is None  # only 1 entry — no further page
+    assert len(calls) == 1
     assert calls[0]["number"] == "+496181123456"
     assert calls[0]["event_type"] == "ring"
 
@@ -279,8 +289,9 @@ async def test_call_log_adapter_with_line_state(test_db):
     await adapter.handle(event, None)
 
     # Verify raw event was logged
-    calls, total = await db.get_call_log()
-    assert total == 1
+    calls, next_cursor = await db.get_call_log()
+    assert next_cursor is None  # only 1 entry — no further page
+    assert len(calls) == 1
     assert calls[0]["event_type"] == "ring"
 
 
@@ -421,3 +432,54 @@ async def test_adapter_outbound_not_reached(test_db):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+@pytest.mark.asyncio
+async def test_get_calls_filter_by_msn(test_db):
+    """Test filtering calls by one or more MSNs."""
+    db = test_db
+
+    # Two calls on MSN 990133, one call on MSN 990134, one without MSN
+    for i in range(2):
+        await db.upsert_call(
+            call_id=uuid7(),
+            connection_id=i,
+            caller_number="+496181123456",
+            called_number="+496181990133",
+            direction="inbound",
+            status="answered",
+            msn="+496181990133",
+        )
+    await db.upsert_call(
+        call_id=uuid7(),
+        connection_id=10,
+        caller_number="+496181123456",
+        called_number="+496181990134",
+        direction="inbound",
+        status="answered",
+        msn="+496181990134",
+    )
+    await db.upsert_call(
+        call_id=uuid7(),
+        connection_id=20,
+        caller_number="+496181123456",
+        called_number="+496181990135",
+        direction="outbound",
+        status="answered",
+        msn=None,
+    )
+
+    # Filter by single MSN
+    calls, _ = await db.get_calls(msn=["+496181990133"])
+    assert len(calls) == 2
+    assert all(c["msn"] == "+496181990133" for c in calls)
+
+    # Filter by multiple MSNs
+    calls, _ = await db.get_calls(msn=["+496181990133", "+496181990134"])
+    assert len(calls) == 3
+    assert all(c["msn"] in {"+496181990133", "+496181990134"} for c in calls)
+
+    # Unknown MSN returns empty result
+    calls, next_cursor = await db.get_calls(msn=["+49000000"])
+    assert next_cursor is None
+    assert calls == []

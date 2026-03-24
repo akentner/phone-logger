@@ -20,13 +20,28 @@ router = APIRouter(prefix="/api/pbx", tags=["pbx"])
 @router.get("/status", response_model=PbxStatusResponse)
 async def get_pbx_status():
     """Get full PBX status: all lines, trunks, MSNs, and devices."""
-    from src.main import get_pipeline
+    from src.main import get_db, get_pipeline
 
     pbx = get_pipeline().pbx
+    db = get_db()
     status = pbx.get_status()
 
+    enriched_lines = []
+    for line in status["lines"]:
+        caller_display = None
+        called_display = None
+        if line.get("caller_number"):
+            caller_display = await db.get_display_name(line["caller_number"])
+        if line.get("called_number"):
+            called_display = await db.get_display_name(line["called_number"])
+        enriched_lines.append(
+            LineStatusResponse(
+                **line, caller_display=caller_display, called_display=called_display
+            )
+        )
+
     return PbxStatusResponse(
-        lines=[LineStatusResponse(**line) for line in status["lines"]],
+        lines=enriched_lines,
         trunks=[TrunkStatusResponse(**trunk) for trunk in status["trunks"]],
         msns=[MsnResponse(**msn) for msn in status["msns"]],
         devices=[DeviceResponse(**dev) for dev in status["devices"]],
@@ -36,25 +51,39 @@ async def get_pbx_status():
 @router.get("/lines", response_model=list[LineStatusResponse])
 async def get_lines():
     """Get all PBX lines with current status."""
-    from src.main import get_pipeline
+    from src.main import get_db, get_pipeline
 
     pbx = get_pipeline().pbx
-    return [
-        LineStatusResponse(**state.model_dump())
-        for state in pbx.get_line_states()
-    ]
+    db = get_db()
+
+    result = []
+    for state in pbx.get_line_states():
+        data = state.model_dump()
+        if data.get("caller_number"):
+            data["caller_display"] = await db.get_display_name(data["caller_number"])
+        if data.get("called_number"):
+            data["called_display"] = await db.get_display_name(data["called_number"])
+        result.append(LineStatusResponse(**data))
+    return result
 
 
 @router.get("/lines/{line_id}", response_model=LineStatusResponse)
 async def get_line(line_id: int):
     """Get a single PBX line status."""
-    from src.main import get_pipeline
+    from src.main import get_db, get_pipeline
 
     pbx = get_pipeline().pbx
     state = pbx.get_line_state(line_id)
     if not state:
         raise HTTPException(status_code=404, detail=f"Line {line_id} not found")
-    return LineStatusResponse(**state.model_dump())
+
+    db = get_db()
+    data = state.model_dump()
+    if data.get("caller_number"):
+        data["caller_display"] = await db.get_display_name(data["caller_number"])
+    if data.get("called_number"):
+        data["called_display"] = await db.get_display_name(data["called_number"])
+    return LineStatusResponse(**data)
 
 
 @router.get("/trunks", response_model=list[TrunkStatusResponse])

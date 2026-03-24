@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -66,6 +66,51 @@ class Database:
             )
             await self.db.commit()
 
+        # Ensure raw_events table and indexes exist (for existing DBs)
+        await self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS raw_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT NOT NULL,
+                raw_input TEXT,
+                raw_event_json TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_raw_events_timestamp ON raw_events(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_raw_events_source ON raw_events(source);
+        """)
+        await self.db.commit()
+
+        # Drop resolved_name from calls and call_log (now derived via JOIN on contacts)
+        cursor = await self.db.execute("PRAGMA table_info(calls)")
+        calls_columns = [row[1] for row in await cursor.fetchall()]
+        if "resolved_name" in calls_columns:
+            logger.info("Running migration: drop resolved_name from calls")
+            await self.db.execute("ALTER TABLE calls DROP COLUMN resolved_name")
+            await self.db.commit()
+
+        cursor = await self.db.execute("PRAGMA table_info(call_log)")
+        call_log_columns = [row[1] for row in await cursor.fetchall()]
+        if "resolved_name" in call_log_columns:
+            logger.info("Running migration: drop resolved_name from call_log")
+            await self.db.execute("ALTER TABLE call_log DROP COLUMN resolved_name")
+            await self.db.commit()
+
+        # Add caller_device_id / called_device_id to calls (replace device/device_type)
+        cursor = await self.db.execute("PRAGMA table_info(calls)")
+        calls_columns = [row[1] for row in await cursor.fetchall()]
+        if "caller_device_id" not in calls_columns:
+            logger.info(
+                "Running migration: add caller_device_id / called_device_id to calls"
+            )
+            await self.db.execute("ALTER TABLE calls ADD COLUMN caller_device_id TEXT")
+            await self.db.execute("ALTER TABLE calls ADD COLUMN called_device_id TEXT")
+            await self.db.commit()
+        if "device" in calls_columns:
+            logger.info("Running migration: drop device / device_type from calls")
+            await self.db.execute("ALTER TABLE calls DROP COLUMN device")
+            await self.db.execute("ALTER TABLE calls DROP COLUMN device_type")
+            await self.db.commit()
+
     # --- Contact Operations ---
 
     async def get_contacts(self) -> list[dict]:
@@ -93,7 +138,7 @@ class Database:
         source: str = "sqlite",
     ) -> dict:
         """Create a new contact."""
-        now = datetime.now().isoformat()
+        now = datetime.now(UTC).isoformat()
         tags_json = json.dumps(tags or [])
         await self.db.execute(
             """INSERT INTO contacts (number, name, number_type, tags, notes, spam_score, source, created_at, updated_at)
@@ -128,7 +173,7 @@ class Database:
             return contact
 
         updates.append("updated_at = ?")
-        params.append(datetime.now().isoformat())
+        params.append(datetime.now(UTC).isoformat())
         params.append(number)
 
         await self.db.execute(
@@ -150,7 +195,7 @@ class Database:
         """Update the last_seen timestamp for a contact."""
         await self.db.execute(
             "UPDATE contacts SET last_seen = ? WHERE number = ?",
-            (datetime.now().isoformat(), number),
+            (datetime.now(UTC).isoformat(), number),
         )
         await self.db.commit()
 
@@ -166,9 +211,9 @@ class Database:
         if not row:
             return None
 
-        cached_at = datetime.fromisoformat(dict(row)["cached_at"])
+        cached_at = datetime.fromisoformat(dict(row)["cached_at"]).replace(tzinfo=UTC)
         ttl_days = dict(row)["ttl_days"]
-        if datetime.now() > cached_at + timedelta(days=ttl_days):
+        if datetime.now(UTC) > cached_at + timedelta(days=ttl_days):
             # Expired - remove from cache
             await self.delete_cache_entry(number, adapter)
             return None
@@ -182,7 +227,13 @@ class Database:
         await self.db.execute(
             """INSERT OR REPLACE INTO cache (number, adapter, result_json, cached_at, ttl_days)
                VALUES (?, ?, ?, ?, ?)""",
-            (number, adapter, json.dumps(result), datetime.now().isoformat(), ttl_days),
+            (
+                number,
+                adapter,
+                json.dumps(result),
+                datetime.now(UTC).isoformat(),
+                ttl_days,
+            ),
         )
         await self.db.commit()
 
@@ -193,8 +244,12 @@ class Database:
         entries = []
         for row in rows:
             row_dict = dict(row)
-            cached_at = datetime.fromisoformat(row_dict["cached_at"])
-            expired = datetime.now() > cached_at + timedelta(days=row_dict["ttl_days"])
+            cached_at = datetime.fromisoformat(row_dict["cached_at"]).replace(
+                tzinfo=UTC
+            )
+            expired = datetime.now(UTC) > cached_at + timedelta(
+                days=row_dict["ttl_days"]
+            )
             result = json.loads(row_dict["result_json"])
             entries.append(
                 {
@@ -232,6 +287,60 @@ class Database:
         await self.db.commit()
         return cursor.rowcount
 
+    # --- Raw Event Log Operations ---
+
+    async def log_raw_event(
+        self,
+        source: str,
+        raw_input: Optional[str],
+        raw_event_json: str,
+        timestamp: str,
+    ) -> int:
+        """Log a raw input event as received from an input adapter."""
+        cursor = await self.db.execute(
+            """INSERT INTO raw_events (source, raw_input, raw_event_json, timestamp)
+               VALUES (?, ?, ?, ?)""",
+            (source, raw_input, raw_event_json, timestamp),
+        )
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def get_raw_events(
+        self,
+        cursor: Optional[str] = None,
+        limit: int = 50,
+        source_filter: Optional[str] = None,
+    ) -> tuple[list[dict], Optional[str]]:
+        """Get paginated raw event log (cursor-based).
+
+        Args:
+            cursor: UUID of the last seen row (exclusive). None fetches from the start.
+            limit: Maximum number of rows to return.
+            source_filter: Optional source name filter.
+
+        Returns:
+            Tuple of (rows, next_cursor). next_cursor is None when no more rows exist.
+        """
+        where_clauses = []
+        params: list = []
+        if source_filter:
+            where_clauses.append("source = ?")
+            params.append(source_filter)
+        if cursor:
+            where_clauses.append("id < ?")
+            params.append(cursor)
+
+        where = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+        params.append(limit)
+        db_cursor = await self.db.execute(
+            f"SELECT * FROM raw_events{where} ORDER BY id DESC LIMIT ?",
+            params,
+        )
+        rows = await db_cursor.fetchall()
+        result = [dict(row) for row in rows]
+        next_cursor = result[-1]["id"] if len(result) == limit else None
+        return result, next_cursor
+
     # --- Call Log Operations ---
 
     async def log_call(
@@ -239,51 +348,58 @@ class Database:
         number: str,
         direction: str,
         event_type: str,
-        resolved_name: str | None = None,
         source: str | None = None,
     ) -> int:
         """Log a call event."""
         cursor = await self.db.execute(
-            """INSERT INTO call_log (number, direction, event_type, resolved_name, source, timestamp)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO call_log (number, direction, event_type, source, timestamp)
+               VALUES (?, ?, ?, ?, ?)""",
             (
                 number,
                 direction,
                 event_type,
-                resolved_name,
                 source,
-                datetime.now().isoformat(),
+                datetime.now(UTC).isoformat(),
             ),
         )
         await self.db.commit()
         return cursor.lastrowid
 
     async def get_call_log(
-        self, page: int = 1, page_size: int = 50, number_filter: str | None = None
-    ) -> tuple[list[dict], int]:
-        """Get paginated call log."""
-        where = ""
+        self,
+        cursor: Optional[str] = None,
+        limit: int = 50,
+        number_filter: str | None = None,
+    ) -> tuple[list[dict], Optional[str]]:
+        """Get paginated call log (cursor-based).
+
+        Args:
+            cursor: UUID of the last seen row (exclusive). None fetches from the start.
+            limit: Maximum number of rows to return.
+            number_filter: Optional partial match on the number column.
+
+        Returns:
+            Tuple of (rows, next_cursor). next_cursor is None when no more rows exist.
+        """
+        where_clauses = []
         params: list = []
         if number_filter:
-            where = "WHERE (number LIKE ? OR resolved_name LIKE ?)"
-            term = f"%{number_filter}%"
-            params.extend([term, term])
+            where_clauses.append("number LIKE ?")
+            params.append(f"%{number_filter}%")
+        if cursor:
+            where_clauses.append("id < ?")
+            params.append(cursor)
 
-        # Get total count
-        count_cursor = await self.db.execute(
-            f"SELECT COUNT(*) FROM call_log {where}", params
-        )
-        total = (await count_cursor.fetchone())[0]
-
-        # Get page
-        offset = (page - 1) * page_size
-        params.extend([page_size, offset])
-        cursor = await self.db.execute(
-            f"SELECT * FROM call_log {where} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+        where = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+        params.append(limit)
+        db_cursor = await self.db.execute(
+            f"SELECT * FROM call_log{where} ORDER BY id DESC LIMIT ?",
             params,
         )
-        rows = await cursor.fetchall()
-        return [dict(row) for row in rows], total
+        rows = await db_cursor.fetchall()
+        result = [dict(row) for row in rows]
+        next_cursor = result[-1]["id"] if len(result) == limit else None
+        return result, next_cursor
 
     # --- Call Aggregation Operations ---
 
@@ -295,8 +411,8 @@ class Database:
         called_number: str,
         direction: str,
         status: str,
-        device: Optional[str] = None,
-        device_type: Optional[str] = None,
+        caller_device_id: Optional[str] = None,
+        called_device_id: Optional[str] = None,
         msn: Optional[str] = None,
         trunk_id: Optional[str] = None,
         line_id: Optional[int] = None,
@@ -305,7 +421,6 @@ class Database:
         connected_at: Optional[str] = None,
         finished_at: Optional[str] = None,
         duration_seconds: Optional[int] = None,
-        resolved_name: Optional[str] = None,
     ) -> dict:
         """Insert or update an aggregated call.
 
@@ -316,8 +431,8 @@ class Database:
             called_number: Called party's phone number
             direction: 'inbound' or 'outbound'
             status: 'ringing', 'dialing', 'answered', 'missed', 'notReached'
-            device: Device name (optional)
-            device_type: Device type (optional)
+            caller_device_id: Device ID of the calling party (AppConfig.pbx.devices[].id)
+            called_device_id: Device ID of the called party (AppConfig.pbx.devices[].id)
             msn: MSN involved in the call (optional)
             trunk_id: Trunk identifier (optional)
             line_id: Line ID (optional)
@@ -326,14 +441,11 @@ class Database:
             connected_at: When the call connected (CONNECT event)
             finished_at: When the call finished (DISCONNECT event)
             duration_seconds: Call duration in seconds
-            resolved_name: Resolved name from resolver adapters
 
         Returns:
             The call record as a dictionary
         """
-        now = datetime.now().isoformat()
-
-        # Check if call exists
+        now = datetime.now(UTC).isoformat()
         cursor = await self.db.execute("SELECT id FROM calls WHERE id = ?", (call_id,))
         existing = await cursor.fetchone()
 
@@ -341,14 +453,14 @@ class Database:
             # Update existing call
             await self.db.execute(
                 """UPDATE calls SET
-                   status = ?, device = ?, device_type = ?, msn = ?, trunk_id = ?,
-                   line_id = ?, is_internal = ?, connected_at = ?, finished_at = ?,
-                   duration_seconds = ?, resolved_name = ?, updated_at = ?
+                   status = ?, caller_device_id = ?, called_device_id = ?, msn = ?,
+                   trunk_id = ?, line_id = ?, is_internal = ?, connected_at = ?,
+                   finished_at = ?, duration_seconds = ?, updated_at = ?
                    WHERE id = ?""",
                 (
                     status,
-                    device,
-                    device_type,
+                    caller_device_id,
+                    called_device_id,
                     msn,
                     trunk_id,
                     line_id,
@@ -356,7 +468,6 @@ class Database:
                     connected_at,
                     finished_at,
                     duration_seconds,
-                    resolved_name,
                     now,
                     call_id,
                 ),
@@ -366,10 +477,10 @@ class Database:
             await self.db.execute(
                 """INSERT INTO calls (
                    id, connection_id, caller_number, called_number, direction, status,
-                   device, device_type, msn, trunk_id, line_id, is_internal,
+                   caller_device_id, called_device_id, msn, trunk_id, line_id, is_internal,
                    started_at, connected_at, finished_at, duration_seconds,
-                   resolved_name, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     call_id,
                     connection_id,
@@ -377,8 +488,8 @@ class Database:
                     called_number,
                     direction,
                     status,
-                    device,
-                    device_type,
+                    caller_device_id,
+                    called_device_id,
                     msn,
                     trunk_id,
                     line_id,
@@ -387,7 +498,6 @@ class Database:
                     connected_at,
                     finished_at,
                     duration_seconds,
-                    resolved_name,
                     now,
                     now,
                 ),
@@ -397,70 +507,91 @@ class Database:
         return await self.get_call(call_id)
 
     async def get_call(self, call_id: str) -> Optional[dict]:
-        """Get a single call by ID."""
-        cursor = await self.db.execute("SELECT * FROM calls WHERE id = ?", (call_id,))
+        """Get a single call by ID, enriched with contact display names."""
+        cursor = await self.db.execute(
+            """SELECT c.*,
+                      COALESCE(cc.name, c.caller_number) AS caller_display,
+                      COALESCE(ca.name, c.called_number) AS called_display
+               FROM calls c
+               LEFT JOIN contacts cc ON cc.number = c.caller_number
+               LEFT JOIN contacts ca ON ca.number = c.called_number
+               WHERE c.id = ?""",
+            (call_id,),
+        )
         row = await cursor.fetchone()
         return self._row_to_call(row) if row else None
 
     async def get_calls(
         self,
-        page: int = 1,
-        page_size: int = 50,
+        cursor: Optional[str] = None,
+        limit: int = 50,
         direction: Optional[str] = None,
         status: Optional[str] = None,
         line_id: Optional[int] = None,
         search: Optional[str] = None,
-    ) -> tuple[list[dict], int]:
-        """Get paginated aggregated calls.
+        msn: Optional[list[str]] = None,
+    ) -> tuple[list[dict], Optional[str]]:
+        """Get paginated aggregated calls (cursor-based).
 
         Args:
-            page: Page number (1-indexed)
-            page_size: Number of items per page
+            cursor: UUID of the last seen row (exclusive). None fetches from the start.
+            limit: Maximum number of rows to return.
             direction: Filter by 'inbound' or 'outbound' (optional)
             status: Filter by status (optional)
             line_id: Filter by line ID (optional)
-            search: Free-text search across caller_number, called_number, resolved_name (optional)
+            search: Free-text search across caller_number, called_number, contact names (optional)
+            msn: Filter by one or more MSNs — matches the stored msn column (optional)
 
         Returns:
-            Tuple of (call records, total count)
+            Tuple of (call records, next_cursor). next_cursor is None when no more rows exist.
         """
         where_clauses = []
         params: list = []
 
         if direction:
-            where_clauses.append("direction = ?")
+            where_clauses.append("c.direction = ?")
             params.append(direction)
         if status:
-            where_clauses.append("status = ?")
+            where_clauses.append("c.status = ?")
             params.append(status)
         if line_id is not None:
-            where_clauses.append("line_id = ?")
+            where_clauses.append("c.line_id = ?")
             params.append(line_id)
         if search:
             where_clauses.append(
-                "(caller_number LIKE ? OR called_number LIKE ? OR resolved_name LIKE ?)"
+                "(c.caller_number LIKE ? OR c.called_number LIKE ?"
+                " OR cc.name LIKE ? OR ca.name LIKE ?)"
             )
             term = f"%{search}%"
-            params.extend([term, term, term])
+            params.extend([term, term, term, term])
+        if msn:
+            placeholders = ",".join("?" * len(msn))
+            where_clauses.append(f"c.msn IN ({placeholders})")
+            params.extend(msn)
+        if cursor:
+            where_clauses.append("c.id < ?")
+            params.append(cursor)
 
         where = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
-        # Get total count
-        count_cursor = await self.db.execute(
-            f"SELECT COUNT(*) FROM calls {where}", params
+        join = (
+            " LEFT JOIN contacts cc ON cc.number = c.caller_number"
+            " LEFT JOIN contacts ca ON ca.number = c.called_number"
         )
-        count_result = await count_cursor.fetchone()
-        total = count_result[0] if count_result else 0
 
-        # Get page
-        offset = (page - 1) * page_size
-        params_with_limit = params + [page_size, offset]
-        cursor = await self.db.execute(
-            f"SELECT * FROM calls {where} ORDER BY started_at DESC LIMIT ? OFFSET ?",
-            params_with_limit,
+        params.append(limit)
+        db_cursor = await self.db.execute(
+            f"""SELECT c.*,
+                       COALESCE(cc.name, c.caller_number) AS caller_display,
+                       COALESCE(ca.name, c.called_number) AS called_display
+                FROM calls c{join}{where}
+                ORDER BY c.id DESC LIMIT ?""",
+            params,
         )
-        rows = await cursor.fetchall()
-        return [self._row_to_call(row) for row in rows], total
+        rows = await db_cursor.fetchall()
+        result = [self._row_to_call(row) for row in rows]
+        next_cursor = result[-1]["id"] if len(result) == limit else None
+        return result, next_cursor
 
     async def get_call_by_connection_id(self, connection_id: int) -> Optional[dict]:
         """Get the most recent call for a Fritz connection_id."""
@@ -470,6 +601,42 @@ class Database:
         )
         row = await cursor.fetchone()
         return self._row_to_call(row) if row else None
+
+    async def get_display_name(self, number: str) -> str:
+        """Get a human-readable display name for a phone number.
+
+        Lookup order:
+        1. contacts table (exact match on number)
+        2. cache table (most recent non-expired entry across all adapters)
+        3. raw number as fallback
+        """
+        # 1. contacts lookup
+        contact = await self.get_contact(number)
+        if contact and contact.get("name"):
+            return contact["name"]
+
+        # 2. cache fallback — pick the most recently cached non-expired entry with a name
+        cursor = await self.db.execute(
+            """SELECT result_json, cached_at, ttl_days FROM cache
+               WHERE number = ?
+               ORDER BY cached_at DESC""",
+            (number,),
+        )
+        rows = await cursor.fetchall()
+        for row in rows:
+            row_dict = dict(row)
+            cached_at = datetime.fromisoformat(row_dict["cached_at"]).replace(
+                tzinfo=UTC
+            )
+            if datetime.now(UTC) > cached_at + timedelta(days=row_dict["ttl_days"]):
+                continue  # expired
+            result = json.loads(row_dict["result_json"])
+            name = result.get("name")
+            if name:
+                return name
+
+        # 3. Fallback: raw number
+        return number
 
     # --- Helpers ---
 

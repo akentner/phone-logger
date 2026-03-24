@@ -19,6 +19,12 @@ def _serialize_line_state(line_state: Optional["LineState"]) -> Optional[dict]:
     """Serialize a LineState to a JSON-friendly dict, or None if absent."""
     if line_state is None:
         return None
+
+    def _device_dict(device) -> Optional[dict]:
+        if not device:
+            return None
+        return {"id": device.id, "name": device.name, "type": device.type}
+
     return {
         "line_id": line_state.line_id,
         "status": line_state.status.value,
@@ -27,15 +33,8 @@ def _serialize_line_state(line_state: Optional["LineState"]) -> Optional[dict]:
         "called_number": line_state.called_number,
         "direction": line_state.direction.value if line_state.direction else None,
         "trunk_id": line_state.trunk_id,
-        "device": (
-            {
-                "id": line_state.device.id,
-                "name": line_state.device.name,
-                "type": line_state.device.type,
-            }
-            if line_state.device
-            else None
-        ),
+        "caller_device": _device_dict(line_state.caller_device),
+        "called_device": _device_dict(line_state.called_device),
         "is_internal": line_state.is_internal,
         "since": line_state.since.isoformat() if line_state.since else None,
     }
@@ -147,13 +146,22 @@ class WebhookOutputAdapter(BaseOutputAdapter):
             "event_type": event.event_type.value,
             "line_id": event.line_id,
             "trunk_id": event.trunk_id,
-            "device": (
+            "caller_device": (
                 {
-                    "id": event.device.id,
-                    "name": event.device.name,
-                    "type": event.device.type,
+                    "id": event.caller_device.id,
+                    "name": event.caller_device.name,
+                    "type": event.caller_device.type,
                 }
-                if event.device
+                if event.caller_device
+                else None
+            ),
+            "called_device": (
+                {
+                    "id": event.called_device.id,
+                    "name": event.called_device.name,
+                    "type": event.called_device.type,
+                }
+                if event.called_device
                 else None
             ),
             "timestamp": event.timestamp.isoformat(),

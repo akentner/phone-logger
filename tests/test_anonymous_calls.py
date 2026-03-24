@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.adapters.input.fritz import FritzCallmonitorAdapter, ANONYMOUS
+from src.adapters.input.fritz_callmonitor import FritzCallmonitorAdapter, ANONYMOUS
 from src.adapters.output.call_log import CallLogOutputAdapter
 from src.config import AdapterConfig
 from src.core.event import CallDirection, CallEvent, CallEventType
@@ -115,17 +115,15 @@ async def test_anonymous_ring_creates_call_record(test_db):
     await adapter.handle(event, ANONYMOUS_RESULT)
 
     # Raw event logged
-    raw, total = await test_db.get_call_log()
-    assert total == 1
+    raw, next_cursor = await test_db.get_call_log()
+    assert next_cursor is None  # only 1 entry
     assert raw[0]["number"] == ANONYMOUS
-    assert raw[0]["resolved_name"] == "Anonym"
 
     # Aggregated call created
     call = await test_db.get_call_by_connection_id(5)
     assert call is not None
     assert call["caller_number"] == ANONYMOUS
     assert call["status"] == "ringing"
-    assert call["resolved_name"] == "Anonym"
 
 
 @pytest.mark.asyncio
@@ -156,4 +154,3 @@ async def test_anonymous_missed_call_lifecycle(test_db):
     assert call is not None
     assert call["caller_number"] == ANONYMOUS
     assert call["status"] == "missed"
-    assert call["resolved_name"] == "Anonym"

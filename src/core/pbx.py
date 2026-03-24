@@ -42,7 +42,8 @@ class LineState(BaseModel):
     called_number: Optional[str] = None
     direction: Optional[CallDirection] = None
     trunk_id: Optional[str] = None
-    device: Optional[DeviceInfo] = None
+    caller_device: Optional[DeviceInfo] = None
+    called_device: Optional[DeviceInfo] = None
     is_internal: bool = False
     since: Optional[datetime] = None
 
@@ -153,6 +154,9 @@ class PbxStateManager:
         self._on_state_change = on_state_change
 
         # Build lookup structures
+        # Fritz!Box Callmonitor sends the numeric device ID (e.g. "10"), not the
+        # dial string extension (e.g. "**610"). Keep both dicts for flexibility.
+        self._devices_by_id: dict[str, DeviceConfig] = {d.id: d for d in config.devices}
         self._devices_by_ext: dict[str, DeviceConfig] = {
             d.extension: d for d in config.devices
         }
@@ -197,8 +201,22 @@ class PbxStateManager:
             local_area_code=self._phone_config.local_area_code,
         )
 
+    def _lookup_device_by_id(self, device_id: str | None) -> DeviceInfo | None:
+        """Look up a device by its Fritz!Box numeric ID (e.g. '10')."""
+        if not device_id:
+            return None
+        device_cfg = self._devices_by_id.get(device_id)
+        if not device_cfg:
+            return None
+        return DeviceInfo(
+            id=device_cfg.id,
+            extension=device_cfg.extension,
+            name=device_cfg.name,
+            type=device_cfg.type.value,
+        )
+
     def _lookup_device(self, extension: str | None) -> DeviceInfo | None:
-        """Look up a device by extension number."""
+        """Look up a device by its dial string extension (e.g. '**610')."""
         if not extension:
             return None
         device_cfg = self._devices_by_ext.get(extension)
@@ -221,8 +239,11 @@ class PbxStateManager:
         """
         Enrich a CallEvent with PBX information before state update.
 
-        Sets: line_id, device, caller_number, called_number.
+        Sets: line_id, caller_device, called_device, caller_number, called_number.
         trunk_id is expected to be set by the input adapter already.
+
+        The Fritz!Box Callmonitor sends the numeric device ID in the 'extension'
+        field (e.g. "10" for the device with id="10", extension="**610", name="EG 24").
         """
         updates: dict = {}
 
@@ -233,30 +254,57 @@ class PbxStateManager:
             except (ValueError, TypeError):
                 pass
 
-        # Device lookup from extension
-        device = self._lookup_device(event.extension)
-        if device:
-            updates["device"] = device
+        # Device lookup from Fritz!Box numeric extension ID
+        device = self._lookup_device_by_id(event.extension)
 
-        # Set caller_number / called_number based on direction and event type
+        # Set caller_number / called_number and assign device to the right party
         if event.event_type == CallEventType.RING:
-            # RING: number = caller (remote), called_number = local MSN
+            # RING: number = caller (remote), extension = called MSN (not a device ID)
             updates["caller_number"] = event.number
-            # called_number is typically the extension field for RING
-            # but for Fritz, extension contains the called MSN
+            # For RING, extension contains the local MSN, not a device ID
             if event.extension and not device:
-                # extension might be the called MSN number, not a device
                 called_e164 = self._try_resolve_msn(event.extension)
                 if called_e164:
                     updates["called_number"] = called_e164
+            # No device known at RING time (caller is external, called device not yet known)
+
         elif event.event_type == CallEventType.CALL:
-            # CALL: number = called (remote), caller = local
+            # CALL (outbound): extension = device ID of the calling device
             updates["called_number"] = event.number
-            # caller_number can be resolved from extension if it's a device
             if event.extension:
                 caller_e164 = self._try_resolve_msn(event.extension)
                 if caller_e164:
                     updates["caller_number"] = caller_e164
+            if device:
+                updates["caller_device"] = (
+                    device  # outbound: local device is the caller
+                )
+
+        elif event.event_type == CallEventType.CONNECT:
+            # CONNECT: extension = device ID of the device that answered/connected.
+            # Fritz!Box does NOT include direction in the CONNECT message, so
+            # event.direction defaults to INBOUND and cannot be trusted here.
+            # Instead, look up the stored LineState to get the actual direction.
+            if device:
+                line_id = updates.get("line_id") or (
+                    int(event.connection_id)
+                    if event.connection_id is not None
+                    else None
+                )
+                existing_state = (
+                    self._states.get(line_id) if line_id is not None else None
+                )
+                actual_direction = (
+                    existing_state.direction
+                    if existing_state and existing_state.direction is not None
+                    else event.direction
+                )
+                # For inbound calls the answering device is the called party;
+                # for outbound it is the caller (already set at CALL time).
+                if actual_direction == CallDirection.INBOUND:
+                    updates["called_device"] = device
+                else:
+                    updates["caller_device"] = device
 
         if updates:
             event = event.model_copy(update=updates)
@@ -315,13 +363,21 @@ class PbxStateManager:
             state.called_number = event.called_number
             state.direction = event.direction
             state.trunk_id = event.trunk_id
-            state.device = event.device
+            state.caller_device = event.caller_device
+            state.called_device = event.called_device
             state.is_internal = self._is_internal(
                 event.caller_number, event.called_number
             )
             state.since = event.timestamp
+        elif new_status == LineStatus.TALKING:
+            # On CONNECT we may learn the answering device — update if provided
+            state.status = new_status
+            if event.caller_device:
+                state.caller_device = event.caller_device
+            if event.called_device:
+                state.called_device = event.called_device
         else:
-            # TALKING, FINISHED, MISSED, NOT_REACHED — just update status
+            # FINISHED, MISSED, NOT_REACHED — just update status
             state.status = new_status
 
         # Schedule auto-reset for terminal states

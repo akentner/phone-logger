@@ -66,7 +66,6 @@ class CallLogEntry(BaseModel):
     number: str
     direction: str
     event_type: str
-    resolved_name: Optional[str] = None
     source: Optional[str] = None
     timestamp: datetime
 
@@ -75,9 +74,8 @@ class CallLogResponse(BaseModel):
     """Paginated call log response."""
 
     items: list[CallLogEntry]
-    total: int
-    page: int
-    page_size: int
+    next_cursor: Optional[str] = None
+    limit: int
 
 
 # --- Call Status and Aggregated Call Models ---
@@ -102,8 +100,8 @@ class CallEntry(BaseModel):
     called_number: str
     direction: str  # 'inbound' or 'outbound'
     status: CallStatus
-    device: Optional[str] = None
-    device_type: Optional[str] = None
+    caller_device: Optional["DeviceInfoResponse"] = None
+    called_device: Optional["DeviceInfoResponse"] = None
     msn: Optional[str] = None
     trunk_id: Optional[str] = None
     line_id: Optional[int] = None
@@ -112,7 +110,8 @@ class CallEntry(BaseModel):
     connected_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     duration_seconds: Optional[int] = None
-    resolved_name: Optional[str] = None
+    caller_display: Optional[str] = None
+    called_display: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -121,9 +120,8 @@ class CallListResponse(BaseModel):
     """Paginated calls response."""
 
     items: list[CallEntry]
-    total: int
-    page: int
-    page_size: int
+    next_cursor: Optional[str] = None
+    limit: int
 
 
 # --- Cache Models ---
@@ -220,9 +218,12 @@ class LineStatusResponse(BaseModel):
     connection_id: Optional[str] = None
     caller_number: Optional[str] = None
     called_number: Optional[str] = None
+    caller_display: Optional[str] = None
+    called_display: Optional[str] = None
     direction: Optional[str] = None
     trunk_id: Optional[str] = None
-    device: Optional[DeviceInfoResponse] = None
+    caller_device: Optional[DeviceInfoResponse] = None
+    called_device: Optional[DeviceInfoResponse] = None
     is_internal: bool = False
     since: Optional[datetime] = None
 

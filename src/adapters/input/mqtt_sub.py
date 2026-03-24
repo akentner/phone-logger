@@ -103,13 +103,15 @@ class MqttInputAdapter(BaseInputAdapter):
     async def _process_message(self, message) -> None:
         """Process a single MQTT message."""
         try:
-            payload = json.loads(message.payload.decode("utf-8"))
+            raw_payload = message.payload.decode("utf-8")
+            payload = json.loads(raw_payload)
 
             event = CallEvent(
                 number=payload.get("number", ""),
                 direction=CallDirection(payload.get("direction", "inbound")),
                 event_type=CallEventType(payload.get("event_type", "ring")),
                 source="mqtt",
+                raw_input=raw_payload,
             )
 
             if self._callback and event.number:

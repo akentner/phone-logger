@@ -381,3 +381,82 @@ async def test_anonymous_calls_use_cached_result(pipeline):
 
     call_args = mock_adapter.handle.call_args
     assert call_args[0][1].name == "Anonym"  # ANONYMOUS_RESULT from cache
+
+
+# --- Number Normalization ---
+
+
+@pytest.mark.asyncio
+async def test_outbound_called_number_is_normalized(pipeline):
+    """For an outbound CALL, called_number without area code should be normalized to E.164."""
+    call_event = CallEvent(
+        number="82628",  # local short form, no area code
+        caller_number="+496181990133",  # own MSN, already E.164
+        called_number="82628",  # same short form — must be normalized
+        direction=CallDirection.OUTBOUND,
+        event_type=CallEventType.CALL,
+        source="test",
+        connection_id="10",
+    )
+
+    mock_adapter = AsyncMock()
+    pipeline._output_adapters = [mock_adapter]
+
+    await pipeline._on_event(call_event)
+
+    call_args = mock_adapter.handle.call_args
+    processed_event = call_args[0][0]
+
+    assert processed_event.number == "+49618182628"
+    assert processed_event.called_number == "+49618182628"
+    assert processed_event.caller_number == "+496181990133"  # already E.164, unchanged
+
+
+@pytest.mark.asyncio
+async def test_inbound_caller_number_is_normalized(pipeline):
+    """For an inbound RING, caller_number without area code should be normalized to E.164."""
+    ring_event = CallEvent(
+        number="82628",  # local short form
+        caller_number="82628",  # same — must be normalized
+        called_number="+496181990133",  # own MSN, already E.164
+        direction=CallDirection.INBOUND,
+        event_type=CallEventType.RING,
+        source="test",
+        connection_id="11",
+    )
+
+    mock_adapter = AsyncMock()
+    pipeline._output_adapters = [mock_adapter]
+
+    await pipeline._on_event(ring_event)
+
+    call_args = mock_adapter.handle.call_args
+    processed_event = call_args[0][0]
+
+    assert processed_event.number == "+49618182628"
+    assert processed_event.caller_number == "+49618182628"
+    assert processed_event.called_number == "+496181990133"  # already E.164, unchanged
+
+
+@pytest.mark.asyncio
+async def test_anonymous_caller_not_normalized(pipeline):
+    """Anonymous caller_number must not be passed through the normalizer."""
+    ring_event = CallEvent(
+        number="anonymous",
+        caller_number="anonymous",
+        called_number="+496181990133",
+        direction=CallDirection.INBOUND,
+        event_type=CallEventType.RING,
+        source="test",
+        connection_id="12",
+    )
+
+    mock_adapter = AsyncMock()
+    pipeline._output_adapters = [mock_adapter]
+
+    await pipeline._on_event(ring_event)
+
+    call_args = mock_adapter.handle.call_args
+    processed_event = call_args[0][0]
+
+    assert processed_event.caller_number == "anonymous"  # must stay unchanged

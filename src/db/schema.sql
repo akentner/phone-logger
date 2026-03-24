@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS call_log (
     number TEXT NOT NULL,
     direction TEXT NOT NULL,          -- 'inbound', 'outbound'
     event_type TEXT NOT NULL,         -- 'ring', 'call', 'connect', 'disconnect'
-    resolved_name TEXT,
     source TEXT,                      -- which adapter resolved it
     timestamp TEXT NOT NULL           -- ISO 8601 datetime
 );
@@ -39,8 +38,10 @@ CREATE TABLE IF NOT EXISTS calls (
     called_number TEXT NOT NULL,
     direction TEXT NOT NULL,          -- 'inbound', 'outbound'
     status TEXT NOT NULL,             -- 'ringing', 'dialing', 'answered', 'missed', 'notReached'
-    device TEXT,                      -- Device name (DECT, VoIP, Fax, etc.), can be NULL
-    device_type TEXT,                 -- Device type (dect, voip, fax, voicebox, etc.), can be NULL
+    device TEXT,                      -- DEPRECATED: kept for migration, use caller_device_id / called_device_id
+    device_type TEXT,                 -- DEPRECATED: kept for migration, use caller_device_id / called_device_id
+    caller_device_id TEXT,            -- Device ID of the calling party (from AppConfig.pbx.devices[].id)
+    called_device_id TEXT,            -- Device ID of the called party (from AppConfig.pbx.devices[].id)
     msn TEXT,                         -- MSN (internal phone number) involved
     trunk_id TEXT,                    -- Trunk ID (SIP0, ISDN0, etc.), can be NULL
     line_id INTEGER,                  -- Line ID (0-4) from PBX
@@ -49,7 +50,6 @@ CREATE TABLE IF NOT EXISTS calls (
     connected_at TEXT,                -- ISO 8601 datetime (CONNECT event), NULL if not connected
     finished_at TEXT,                 -- ISO 8601 datetime (DISCONNECT event), NULL if still active
     duration_seconds INTEGER,         -- Duration in seconds, NULL if still active
-    resolved_name TEXT,               -- Resolved name from resolver adapters
     created_at TEXT NOT NULL,         -- ISO 8601 datetime (record creation)
     updated_at TEXT NOT NULL          -- ISO 8601 datetime (last update)
 );
@@ -71,3 +71,14 @@ CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY);
 
 INSERT OR IGNORE INTO _migrations (name) VALUES ('add_number_type');
 -- The actual column addition happens in Python code (Database._run_migrations)
+
+CREATE TABLE IF NOT EXISTS raw_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,             -- 'fritz_callmonitor', 'mqtt', 'rest'
+    raw_input TEXT,                   -- adapter-specific raw line / payload
+    raw_event_json TEXT NOT NULL,     -- serialized CallEvent as JSON
+    timestamp TEXT NOT NULL           -- ISO 8601 datetime
+);
+
+CREATE INDEX IF NOT EXISTS idx_raw_events_timestamp ON raw_events(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_raw_events_source ON raw_events(source);

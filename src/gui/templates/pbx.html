@@ -54,13 +54,14 @@
             <table>
                 <thead>
                     <tr>
+                        <th>ID</th>
                         <th>Durchwahl</th>
                         <th>Name</th>
                         <th>Typ</th>
                     </tr>
                 </thead>
                 <tbody id="devices-table">
-                    <tr><td colspan="3">Lade...</td></tr>
+                    <tr><td colspan="4">Lade...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -112,9 +113,10 @@
             if (isActive) {
                 const dir = line.direction === 'inbound' ? '\u2199\uFE0F' : '\u2197\uFE0F';
                 const internal = line.is_internal ? `<span class="pbx-internal-badge">${t('pbx.internal_call')}</span>` : '';
-                const caller = line.caller_number || '-';
-                const called = line.called_number || '-';
-                const device = line.device ? `<div class="pbx-line-device">${line.device.name} (${t(`device_type.${line.device.type}`) || line.device.type})</div>` : '';
+                const caller = line.caller_display || line.caller_number || '-';
+                const called = line.called_display || line.called_number || '-';
+                const callerDevice = line.caller_device ? `<div class="pbx-line-device">${t('pbx.caller_device')}: ${line.caller_device.name} (${t(`device_type.${line.caller_device.type}`) || line.caller_device.type})</div>` : '';
+                const calledDevice = line.called_device ? `<div class="pbx-line-device">${t('pbx.called_device')}: ${line.called_device.name} (${t(`device_type.${line.called_device.type}`) || line.called_device.type})</div>` : '';
                 const trunk = line.trunk_id ? `<div class="pbx-line-trunk">Trunk: ${line.trunk_id}</div>` : '';
                 const since = line.since ? `<div class="pbx-line-since">seit ${formatTime(line.since)}</div>` : '';
 
@@ -123,7 +125,7 @@
                         <div class="pbx-line-numbers">
                             ${dir} ${caller} &rarr; ${called} ${internal}
                         </div>
-                        ${device}${trunk}${since}
+                        ${callerDevice}${calledDevice}${trunk}${since}
                     </div>
                 `;
             }
@@ -179,11 +181,12 @@
     function renderDevices(devices) {
         const tbody = document.getElementById('devices-table');
         if (!devices || devices.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3">Keine Endgeräte konfiguriert</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4">Keine Endgeräte konfiguriert</td></tr>';
             return;
         }
         tbody.innerHTML = devices.map(d => `
             <tr>
+                <td><code>${d.id}</code></td>
                 <td><strong>${d.extension}</strong></td>
                 <td>${d.name}</td>
                 <td><span class="pbx-device-type pbx-device-${d.type}">${t(`device_type.${d.type}`) || d.type}</span></td>

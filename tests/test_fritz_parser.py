@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.adapters.input.fritz import FritzCallmonitorAdapter
+from src.adapters.input.fritz_callmonitor import FritzCallmonitorAdapter
 from src.core.event import CallDirection, CallEventType
 
 
@@ -18,13 +18,13 @@ class TestFritzParser:
         assert event.direction == CallDirection.INBOUND
         assert event.event_type == CallEventType.RING
         assert event.connection_id == "0"
-        assert event.source == "fritz"
+        assert event.source == "fritz_callmonitor"
         assert event.caller_number == "0123456789"
         assert event.called_number == "987654321"
         assert event.trunk_id == "SIP0"
 
     def test_parse_call_event(self):
-        line = "15.03.26 10:15:00;CALL;1;12;0987654321;0123456789;SIP0"
+        line = "15.03.26 10:15:00;CALL;1;12;0123456789;0987654321;SIP0"
         event = FritzCallmonitorAdapter._parse_line(line)
 
         assert event is not None
@@ -32,8 +32,8 @@ class TestFritzParser:
         assert event.direction == CallDirection.OUTBOUND
         assert event.event_type == CallEventType.CALL
         assert event.extension == "12"
-        assert event.called_number == "0987654321"
         assert event.caller_number == "0123456789"
+        assert event.called_number == "0987654321"
         assert event.trunk_id == "SIP0"
 
     def test_parse_connect_event(self):

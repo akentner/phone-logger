@@ -21,7 +21,7 @@ ANONYMOUS_RESULT = ResolveResult(name="Anonym", number=ANONYMOUS, source="system
 from src.db.database import Database
 
 # Import all adapter implementations
-from src.adapters.input.fritz import FritzCallmonitorAdapter
+from src.adapters.input.fritz_callmonitor import FritzCallmonitorAdapter
 from src.adapters.input.rest import RestInputAdapter
 from src.adapters.input.mqtt_sub import MqttInputAdapter
 from src.adapters.resolver.json_file import JsonFileResolver
@@ -29,6 +29,7 @@ from src.adapters.resolver.sqlite_db import SqliteResolver
 from src.adapters.resolver.tellows import TellowsResolver
 from src.adapters.resolver.dastelefon import DasTelefonbuchResolver
 from src.adapters.resolver.klartelbuch import KlarTelefonbuchResolver
+from src.adapters.resolver.msn import MsnResolver
 from src.adapters.output.call_log import CallLogOutputAdapter
 from src.adapters.output.webhook import WebhookOutputAdapter
 from src.adapters.output.mqtt_pub import MqttPublisherOutputAdapter
@@ -136,6 +137,7 @@ class Pipeline:
         Handle an incoming call event.
 
         Processing order:
+        0. Persist raw event to DB
         1. Normalize phone number to E.164
         2. Enrich with PBX info (line, device, caller/called numbers)
         3. Update PBX line state (FSM transition)
@@ -146,12 +148,44 @@ class Pipeline:
         8. Dispatch to output adapters
         9. Cleanup resolve cache on terminal states
         """
-        # 1. Normalize number to E.164
+        # 0. Persist raw event before any processing/mutation
+        try:
+            await self.db.log_raw_event(
+                source=event.source,
+                raw_input=event.raw_input,
+                raw_event_json=event.model_dump_json(),
+                timestamp=event.timestamp.isoformat(),
+            )
+        except Exception:
+            logger.exception("Failed to log raw event to DB")
+
+        # 1. Normalize number fields to E.164
+        norm_updates: dict = {}
         if event.number:
             normalized = self.normalize(event.number)
             if normalized != event.number:
                 logger.debug("Normalized number: %r -> %r", event.number, normalized)
-            event = event.model_copy(update={"number": normalized})
+            norm_updates["number"] = normalized
+        if event.caller_number and event.caller_number != ANONYMOUS:
+            normalized_caller = self.normalize(event.caller_number)
+            if normalized_caller != event.caller_number:
+                logger.debug(
+                    "Normalized caller_number: %r -> %r",
+                    event.caller_number,
+                    normalized_caller,
+                )
+            norm_updates["caller_number"] = normalized_caller
+        if event.called_number and event.called_number != ANONYMOUS:
+            normalized_called = self.normalize(event.called_number)
+            if normalized_called != event.called_number:
+                logger.debug(
+                    "Normalized called_number: %r -> %r",
+                    event.called_number,
+                    normalized_called,
+                )
+            norm_updates["called_number"] = normalized_called
+        if norm_updates:
+            event = event.model_copy(update=norm_updates)
 
         # 2. Enrich with PBX information
         event = self.pbx.enrich_event(event)
@@ -191,8 +225,11 @@ class Pipeline:
                 # Fill other fields from LineState
                 if not event.trunk_id and line_state.trunk_id:
                     updates["trunk_id"] = line_state.trunk_id
-                if not event.device and line_state.device:
-                    updates["device"] = line_state.device
+                # Fill caller/called device from LineState if not already set on event
+                if not event.caller_device and line_state.caller_device:
+                    updates["caller_device"] = line_state.caller_device
+                if not event.called_device and line_state.called_device:
+                    updates["called_device"] = line_state.called_device
                 # Direction should match LineState
                 if event.direction != line_state.direction and line_state.direction:
                     updates["direction"] = line_state.direction
@@ -276,6 +313,9 @@ class Pipeline:
                 cfg, self.config.contacts_json_path
             ),
             "sqlite": lambda cfg: SqliteResolver(cfg, self.db),
+            "msn": lambda cfg: MsnResolver(
+                cfg, self.config.pbx.msns, self.config.phone
+            ),
             "tellows": lambda cfg: TellowsResolver(cfg, self.db),
             "dastelefon": lambda cfg: DasTelefonbuchResolver(cfg, self.db),
             "klartelbuch": lambda cfg: KlarTelefonbuchResolver(cfg, self.db),
@@ -304,7 +344,7 @@ class Pipeline:
                 )
                 continue
 
-            if adapter_config.name == "fritz":
+            if adapter_config.name == "fritz_callmonitor":
                 adapter = FritzCallmonitorAdapter(adapter_config)
                 self._input_adapters.append(adapter)
 

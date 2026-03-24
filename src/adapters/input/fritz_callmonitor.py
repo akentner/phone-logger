@@ -2,8 +2,9 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Callable, Coroutine, Optional
+from zoneinfo import ZoneInfo
 
 from src.adapters.base import BaseInputAdapter
 from src.config import AdapterConfig
@@ -37,6 +38,7 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
         super().__init__(config)
         self.host = config.config.get("host", "192.168.178.1")
         self.port = config.config.get("port", 1012)
+        self._timezone = ZoneInfo(config.config.get("timezone", "Europe/Berlin"))
         self._callback: Optional[Callable[[CallEvent], Coroutine]] = None
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
@@ -49,7 +51,9 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
         self._callback = callback
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
-        self.logger.info("Fritz Callmonitor adapter started (target: %s:%d)", self.host, self.port)
+        self.logger.info(
+            "Fritz Callmonitor adapter started (target: %s:%d)", self.host, self.port
+        )
 
     async def stop(self) -> None:
         """Stop listening and disconnect."""
@@ -87,7 +91,9 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
 
     async def _connect_and_listen(self) -> None:
         """Connect to Fritz!Box and listen for events."""
-        self.logger.info("Connecting to Fritz!Box Callmonitor at %s:%d", self.host, self.port)
+        self.logger.info(
+            "Connecting to Fritz!Box Callmonitor at %s:%d", self.host, self.port
+        )
 
         self._reader, self._writer = await asyncio.open_connection(self.host, self.port)
         self.logger.info("Connected to Fritz!Box Callmonitor")
@@ -107,22 +113,28 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
         self.logger.debug("Fritz raw: %s", line)
 
         try:
-            event = self._parse_line(line)
+            event = self._parse_line(line, tz=self._timezone)
             if event and self._callback:
+                event = event.model_copy(update={"raw_input": line})
                 await self._callback(event)
         except Exception:
             self.logger.exception("Failed to parse Fritz Callmonitor line: %s", line)
 
     @staticmethod
-    def _parse_line(line: str) -> Optional[CallEvent]:
+    def _parse_line(line: str, tz: Optional[ZoneInfo] = None) -> Optional[CallEvent]:
         """
         Parse a Fritz!Box Callmonitor line into a CallEvent.
 
         Format varies by event type:
         RING:       date;RING;conn_id;caller_number;called_number;SIP
-        CALL:       date;CALL;conn_id;extension;called_number;caller_number;SIP
+        CALL:       date;CALL;conn_id;extension;caller_number;called_number;SIP
         CONNECT:    date;CONNECT;conn_id;extension;number
         DISCONNECT: date;DISCONNECT;conn_id;duration
+
+        Args:
+            line: Raw TCP line from Fritz!Box Callmonitor.
+            tz: Local timezone for parsing the Fritz!Box timestamp. If None,
+                defaults to UTC (timestamps will be off by UTC offset).
         """
         parts = line.split(";")
         if len(parts) < 4:
@@ -137,9 +149,11 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
             return None
 
         try:
-            timestamp = datetime.strptime(timestamp_str, "%d.%m.%y %H:%M:%S")
+            local_tz = tz or UTC
+            naive_dt = datetime.strptime(timestamp_str, "%d.%m.%y %H:%M:%S")
+            timestamp = naive_dt.replace(tzinfo=local_tz).astimezone(UTC)
         except ValueError:
-            timestamp = datetime.now()
+            timestamp = datetime.now(UTC)
 
         number = ""
         direction = CallDirection.INBOUND
@@ -159,12 +173,12 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
             direction = CallDirection.INBOUND
 
         elif event_type == CallEventType.CALL:
-            # CALL: date;CALL;conn_id;extension;called_number;caller_number;SIP
+            # CALL: date;CALL;conn_id;extension;caller_number;called_number;SIP
             extension = parts[3].strip() if len(parts) > 3 else None
-            called_number = parts[4].strip() if len(parts) > 4 else ""
-            caller_number = parts[5].strip() if len(parts) > 5 else None
+            caller_number = parts[4].strip() if len(parts) > 4 else None
+            called_number = parts[5].strip() if len(parts) > 5 else ""
             trunk_id = parts[6].strip() if len(parts) > 6 else None
-            # Empty called = anonymous/unavailable target (rare but possible)
+            # Remote party for outbound = the called number
             number = called_number if called_number else ANONYMOUS
             direction = CallDirection.OUTBOUND
 
@@ -183,11 +197,13 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
             direction=direction,
             event_type=event_type,
             timestamp=timestamp,
-            source="fritz",
+            source="fritz_callmonitor",
             connection_id=connection_id,
             extension=extension,
             raw_number=caller_number if event_type == CallEventType.RING else number,
-            caller_number=caller_number if caller_number else (ANONYMOUS if event_type == CallEventType.RING else None),
+            caller_number=caller_number
+            if caller_number
+            else (ANONYMOUS if event_type == CallEventType.RING else None),
             called_number=called_number or None,
             trunk_id=trunk_id,
         )

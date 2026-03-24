@@ -22,8 +22,8 @@ options:
   fritz_host: "192.168.178.1"
   fritz_port: 1012
   input_adapters:
-    - type: "fritz"
-      name: "fritz"
+    - type: "fritz_callmonitor"
+      name: "fritz_callmonitor"
       enabled: true
     - type: "rest"
       name: "rest"

@@ -1,5 +1,6 @@
 """REST input adapter - receives call events via HTTP POST."""
 
+import json
 import logging
 from typing import Callable, Coroutine, Optional
 
@@ -31,8 +32,9 @@ class RestInputAdapter(BaseInputAdapter):
         self._callback = None
         self.logger.info("REST input adapter stopped")
 
-    async def trigger(self, number: str, direction: str = "inbound",
-                      event_type: str = "ring") -> Optional[CallEvent]:
+    async def trigger(
+        self, number: str, direction: str = "inbound", event_type: str = "ring"
+    ) -> Optional[CallEvent]:
         """
         Manually trigger a call event (called from REST API).
 
@@ -42,11 +44,15 @@ class RestInputAdapter(BaseInputAdapter):
             self.logger.warning("REST trigger called but no callback registered")
             return None
 
+        raw_input = json.dumps(
+            {"number": number, "direction": direction, "event_type": event_type}
+        )
         event = CallEvent(
             number=number,
             direction=CallDirection(direction),
             event_type=CallEventType(event_type),
             source="rest",
+            raw_input=raw_input,
         )
 
         await self._callback(event)

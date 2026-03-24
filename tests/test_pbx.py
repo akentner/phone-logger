@@ -4,7 +4,15 @@ import asyncio
 
 import pytest
 
-from src.config import DeviceConfig, DeviceType, MsnConfig, PbxConfig, PhoneConfig, TrunkConfig, TrunkType
+from src.config import (
+    DeviceConfig,
+    DeviceType,
+    MsnConfig,
+    PbxConfig,
+    PhoneConfig,
+    TrunkConfig,
+    TrunkType,
+)
 from src.core.event import CallDirection, CallEvent, CallEventType
 from src.core.pbx import LineFSM, LineStatus, PbxStateManager
 
@@ -142,7 +150,9 @@ def _make_pbx_config() -> PbxConfig:
             MsnConfig(number="990134", label="Fax"),
         ],
         devices=[
-            DeviceConfig(id="10", extension="10", name="Wohnzimmer", type=DeviceType.DECT),
+            DeviceConfig(
+                id="10", extension="10", name="Wohnzimmer", type=DeviceType.DECT
+            ),
             DeviceConfig(id="20", extension="20", name="Büro", type=DeviceType.VOIP),
         ],
     )
@@ -152,14 +162,18 @@ def _make_phone_config() -> PhoneConfig:
     return PhoneConfig(country_code="49", local_area_code="6181")
 
 
-def _make_ring_event(connection_id: str = "0", number: str = "+491234567890",
-                     called: str = "990133", trunk: str = "SIP0") -> CallEvent:
+def _make_ring_event(
+    connection_id: str = "0",
+    number: str = "+491234567890",
+    called: str = "990133",
+    trunk: str = "SIP0",
+) -> CallEvent:
     """Create a typical inbound RING event."""
     return CallEvent(
         number=number,
         direction=CallDirection.INBOUND,
         event_type=CallEventType.RING,
-        source="fritz",
+        source="fritz_callmonitor",
         connection_id=connection_id,
         extension=called,
         caller_number=number,
@@ -168,14 +182,18 @@ def _make_ring_event(connection_id: str = "0", number: str = "+491234567890",
     )
 
 
-def _make_call_event(connection_id: str = "0", number: str = "+491234567890",
-                     extension: str = "10", trunk: str = "SIP0") -> CallEvent:
+def _make_call_event(
+    connection_id: str = "0",
+    number: str = "+491234567890",
+    extension: str = "10",
+    trunk: str = "SIP0",
+) -> CallEvent:
     """Create a typical outbound CALL event."""
     return CallEvent(
         number=number,
         direction=CallDirection.OUTBOUND,
         event_type=CallEventType.CALL,
-        source="fritz",
+        source="fritz_callmonitor",
         connection_id=connection_id,
         extension=extension,
         called_number=number,
@@ -188,7 +206,7 @@ def _make_connect_event(connection_id: str = "0") -> CallEvent:
         number="",
         direction=CallDirection.INBOUND,
         event_type=CallEventType.CONNECT,
-        source="fritz",
+        source="fritz_callmonitor",
         connection_id=connection_id,
     )
 
@@ -198,7 +216,7 @@ def _make_disconnect_event(connection_id: str = "0") -> CallEvent:
         number="",
         direction=CallDirection.INBOUND,
         event_type=CallEventType.DISCONNECT,
-        source="fritz",
+        source="fritz_callmonitor",
         connection_id=connection_id,
     )
 
@@ -222,15 +240,15 @@ class TestPbxStateManager:
         pbx = PbxStateManager(_make_pbx_config(), _make_phone_config())
         event = _make_call_event(extension="10")
         enriched = pbx.enrich_event(event)
-        assert enriched.device is not None
-        assert enriched.device.name == "Wohnzimmer"
-        assert enriched.device.type == "dect"
+        assert enriched.caller_device is not None
+        assert enriched.caller_device.name == "Wohnzimmer"
+        assert enriched.caller_device.type == "dect"
 
     def test_enrich_event_no_device_for_unknown_extension(self):
         pbx = PbxStateManager(_make_pbx_config(), _make_phone_config())
         event = _make_call_event(extension="99")
         enriched = pbx.enrich_event(event)
-        assert enriched.device is None
+        assert enriched.caller_device is None
 
     def test_msn_e164_resolution(self):
         pbx = PbxStateManager(_make_pbx_config(), _make_phone_config())
@@ -278,6 +296,39 @@ class TestPbxStateManager:
         event = _make_disconnect_event(connection_id="0")
         pbx.update_state(pbx.enrich_event(event))
         assert pbx.get_line_state(0).status == LineStatus.FINISHED
+
+    def test_outbound_connect_does_not_set_called_device(self):
+        """Regression: outbound CALL followed by CONNECT must not set called_device.
+
+        Fritz!Box sends CONNECT without a direction field, so the event always
+        arrives with direction=INBOUND.  The fix in enrich_event must look up
+        the stored LineState direction instead of trusting event.direction.
+        """
+        pbx = PbxStateManager(_make_pbx_config(), _make_phone_config())
+
+        # CALL (outbound, device id=10 → "Wohnzimmer")
+        call_ev = _make_call_event(connection_id="0", extension="10")
+        pbx.update_state(pbx.enrich_event(call_ev))
+
+        state = pbx.get_line_state(0)
+        assert state.direction == CallDirection.OUTBOUND
+        assert state.caller_device is not None
+        assert state.called_device is None
+
+        # CONNECT — Fritz!Box sends direction=INBOUND (the default), but the
+        # actual call is outbound.  called_device must remain None.
+        connect_ev = _make_connect_event(connection_id="0")
+        assert connect_ev.direction == CallDirection.INBOUND  # confirm the precondition
+
+        enriched_connect = pbx.enrich_event(connect_ev)
+        pbx.update_state(enriched_connect)
+
+        state = pbx.get_line_state(0)
+        assert state.status == LineStatus.TALKING
+        assert state.called_device is None, (
+            "called_device must be None for an outbound call to an external number"
+        )
+        assert state.caller_device is not None, "caller_device must remain set"
 
     def test_update_state_missed_call(self):
         """Test missed call: ring -> disconnect -> missed."""
@@ -354,7 +405,7 @@ class TestPbxStateManager:
             number="+496181990134",
             direction=CallDirection.INBOUND,
             event_type=CallEventType.RING,
-            source="fritz",
+            source="fritz_callmonitor",
             connection_id="0",
             caller_number="+496181990133",
             called_number="+496181990134",

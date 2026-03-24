@@ -38,9 +38,9 @@
 
 {% block scripts %}
 <script>
-    let currentPage = 1;
     let currentView = 'history'; // 'history' or 'events'
-    const pageSize = 50;
+    const limit = 50;
+    let nextCursor = null;
 
     // MSN lookup map: e164 -> "number (label)"
     let msnMap = {};
@@ -63,7 +63,7 @@
 
     function switchView(view) {
         currentView = view;
-        currentPage = 1;
+        nextCursor = null;
         loadCalls();
     }
 
@@ -73,13 +73,13 @@
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    async function loadCalls(page = 1) {
-        currentPage = page;
+    async function loadCalls(cursor = null) {
         const filter = document.getElementById('search-filter').value.trim();
 
         let url;
         if (currentView === 'history') {
-            url = `/api/calls?page=${page}&page_size=${pageSize}`;
+            url = `/api/calls?limit=${limit}`;
+            if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
             if (filter) {
                 const lower = filter.toLowerCase();
                 // Direction keywords
@@ -98,12 +98,14 @@
                 else url += `&search=${encodeURIComponent(filter)}`;
             }
         } else {
-            url = `/api/calls/events?page=${page}&page_size=${pageSize}`;
+            url = `/api/calls/events?limit=${limit}`;
+            if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
             if (filter) url += `&search=${encodeURIComponent(filter)}`;
         }
 
         try {
             const data = await apiCall(url);
+            nextCursor = data.next_cursor || null;
             renderCalls(data);
         } catch (e) {
             showAlert('Fehler beim Laden: ' + e.message, 'error');
@@ -135,13 +137,13 @@
             }
 
             tbody.innerHTML = data.items.map(c => {
-                // Resolved name on the remote party (direction-dependent)
-                const callerDisplay = c.direction === 'inbound'
-                    ? (c.resolved_name || c.caller_number)
-                    : c.caller_number;
-                const calledDisplay = c.direction === 'outbound'
-                    ? (c.resolved_name || c.called_number)
-                    : c.called_number;
+                // caller_display and called_display are resolved server-side via
+                // LEFT JOIN contacts — they already fall back to the raw number.
+                const callerDisplay = c.caller_display;
+                const calledDisplay = c.called_display;
+                const isInbound = c.direction === 'inbound';
+                // Remote party number for the Details button
+                const remoteNumber = isInbound ? c.caller_number : c.called_number;
 
                 return `
                 <tr>
@@ -152,17 +154,17 @@
                         </span>
                     </td>
                     <td>
-                        <span class="${c.direction === 'inbound' ? 'direction-in' : 'direction-out'}">
-                            ${c.direction === 'inbound' ? '&#x2199;&#xFE0F; Eingehend' : '&#x2197;&#xFE0F; Ausgehend'}
+                        <span class="${isInbound ? 'direction-in' : 'direction-out'}">
+                            ${isInbound ? '&#x2199;&#xFE0F; Eingehend' : '&#x2197;&#xFE0F; Ausgehend'}
                         </span>
                     </td>
                     <td title="${esc(c.caller_number)}"><strong>${esc(callerDisplay)}</strong></td>
                     <td title="${esc(c.called_number)}"><strong>${esc(calledDisplay)}</strong></td>
                     <td>${esc(msnLabel(c.msn))}</td>
-                    <td>${c.device || c.device_type || '-'}</td>
+                    <td>${esc((isInbound ? c.called_device : c.caller_device)?.name || '-')}</td>
                     <td>${c.duration_seconds !== null ? formatDuration(c.duration_seconds) : '-'}</td>
                     <td>
-                        <button class="btn btn-sm btn-outline" onclick="resolveNumber('${esc(c.caller_number)}')">Details</button>
+                        <button class="btn btn-sm btn-outline" onclick="resolveNumber('${esc(remoteNumber)}')">Details</button>
                     </td>
                 </tr>`;
             }).join('');
@@ -192,7 +194,7 @@
                         </span>
                     </td>
                     <td>${c.event_type}</td>
-                    <td title="${esc(c.number)}"><strong>${esc(c.resolved_name || c.number)}</strong></td>
+                    <td title="${esc(c.number)}"><strong>${esc(c.number)}</strong></td>
                     <td>${c.source || '-'}</td>
                     <td>
                         <button class="btn btn-sm btn-outline" onclick="resolveNumber('${esc(c.number)}')">Aufl&ouml;sen</button>
@@ -202,21 +204,12 @@
         }
 
         // Pagination
-        const totalPages = Math.ceil(data.total / pageSize);
         const pag = document.getElementById('pagination');
-        if (totalPages <= 1) {
+        if (nextCursor) {
+            pag.innerHTML = `<button class="btn btn-sm btn-outline" onclick="loadCalls('${nextCursor}')">Weiter &#x276F;</button>`;
+        } else {
             pag.innerHTML = '';
-            return;
         }
-        let html = '';
-        if (currentPage > 1) {
-            html += `<button class="btn btn-sm btn-outline" onclick="loadCalls(${currentPage - 1})">&#x276E; Zur&uuml;ck</button>`;
-        }
-        html += `<span>Seite ${currentPage} von ${totalPages} (${data.total} Eintr&auml;ge)</span>`;
-        if (currentPage < totalPages) {
-            html += `<button class="btn btn-sm btn-outline" onclick="loadCalls(${currentPage + 1})">Weiter &#x276F;</button>`;
-        }
-        pag.innerHTML = html;
     }
 
     function getStatusLabel(status) {
@@ -247,7 +240,7 @@
     }
 
     document.getElementById('search-filter').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') loadCalls();
+        if (e.key === 'Enter') { nextCursor = null; loadCalls(); }
     });
 
     // Load MSN map first, then initial call list

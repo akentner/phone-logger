@@ -1,7 +1,7 @@
 """Call log output adapter - stores all call events and aggregated calls in SQLite."""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
 from src.adapters.base import BaseOutputAdapter
@@ -45,7 +45,6 @@ class CallLogOutputAdapter(BaseOutputAdapter):
             number=event.number,
             direction=event.direction.value,
             event_type=event.event_type.value,
-            resolved_name=resolved_name,
             source=source,
         )
 
@@ -60,7 +59,7 @@ class CallLogOutputAdapter(BaseOutputAdapter):
         # 2. Aggregate into calls table (requires connection_id for correlation)
         if event.connection_id:
             try:
-                await self._aggregate_call(event, resolved_name, line_state)
+                await self._aggregate_call(event, line_state)
             except Exception:
                 self.logger.exception(
                     "Failed to aggregate call for connection_id=%s", event.connection_id
@@ -69,20 +68,22 @@ class CallLogOutputAdapter(BaseOutputAdapter):
     async def _aggregate_call(
         self,
         event: CallEvent,
-        resolved_name: Optional[str],
         line_state: Optional["LineState"],
     ) -> None:
         """Upsert aggregated call record based on event type."""
         connection_id = int(event.connection_id)  # type: ignore[arg-type]
         event_type = event.event_type
-        now = datetime.now().isoformat()
+        now = datetime.now(UTC).isoformat()
 
-        # Extract device info from the event (PBX-enriched) or line_state fallback
-        device_info = event.device or (line_state.device if line_state else None)
-        device_name = device_info.name if device_info else None
-        device_type = (
-            device_info.type if device_info else None
-        )  # DeviceInfo.type is the type string
+        # Extract device IDs from the event (PBX-enriched) or line_state fallback
+        caller_device = event.caller_device or (
+            line_state.caller_device if line_state else None
+        )
+        called_device = event.called_device or (
+            line_state.called_device if line_state else None
+        )
+        caller_device_id = caller_device.id if caller_device else None
+        called_device_id = called_device.id if called_device else None
 
         # is_internal lives on line_state (set by PBX enrichment)
         is_internal = line_state.is_internal if line_state else False
@@ -102,14 +103,13 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                 called_number=event.called_number or event.number,
                 direction=event.direction.value,
                 status="ringing",
-                device=device_name,
-                device_type=device_type,
+                caller_device_id=caller_device_id,
+                called_device_id=called_device_id,
                 msn=msn,
                 trunk_id=event.trunk_id,
                 line_id=event.line_id,
                 is_internal=is_internal,
                 started_at=now,
-                resolved_name=resolved_name,
             )
 
         elif event_type == CallEventType.CALL:
@@ -121,14 +121,13 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                 called_number=event.called_number or event.number,
                 direction=event.direction.value,
                 status="dialing",
-                device=device_name,
-                device_type=device_type,
+                caller_device_id=caller_device_id,
+                called_device_id=called_device_id,
                 msn=msn,
                 trunk_id=event.trunk_id,
                 line_id=event.line_id,
                 is_internal=is_internal,
                 started_at=now,
-                resolved_name=resolved_name,
             )
 
         elif event_type == CallEventType.CONNECT:
@@ -142,15 +141,16 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                     called_number=existing["called_number"],
                     direction=existing["direction"],
                     status="answered",
-                    device=device_name or existing.get("device"),
-                    device_type=device_type or existing.get("device_type"),
+                    caller_device_id=caller_device_id
+                    or existing.get("caller_device_id"),
+                    called_device_id=called_device_id
+                    or existing.get("called_device_id"),
                     msn=existing.get("msn"),
                     trunk_id=existing.get("trunk_id"),
                     line_id=existing.get("line_id"),
                     is_internal=existing.get("is_internal", False),
                     started_at=existing["started_at"],
                     connected_at=now,
-                    resolved_name=resolved_name or existing.get("resolved_name"),
                 )
             else:
                 self.logger.warning(
@@ -176,9 +176,13 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                 # Duration: from connect time if answered, else from start
                 connected_at = existing.get("connected_at")
                 if connected_at:
-                    start_time = datetime.fromisoformat(connected_at)
+                    start_time = datetime.fromisoformat(connected_at).replace(
+                        tzinfo=UTC
+                    )
                 else:
-                    start_time = datetime.fromisoformat(existing["started_at"])
+                    start_time = datetime.fromisoformat(existing["started_at"]).replace(
+                        tzinfo=UTC
+                    )
                 duration = max(
                     0, int((datetime.fromisoformat(now) - start_time).total_seconds())
                 )
@@ -190,8 +194,8 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                     called_number=existing["called_number"],
                     direction=existing["direction"],
                     status=final_status,
-                    device=existing.get("device"),
-                    device_type=existing.get("device_type"),
+                    caller_device_id=existing.get("caller_device_id"),
+                    called_device_id=existing.get("called_device_id"),
                     msn=existing.get("msn"),
                     trunk_id=existing.get("trunk_id"),
                     line_id=existing.get("line_id"),
@@ -200,7 +204,6 @@ class CallLogOutputAdapter(BaseOutputAdapter):
                     connected_at=connected_at,
                     finished_at=now,
                     duration_seconds=duration,
-                    resolved_name=existing.get("resolved_name"),
                 )
             else:
                 self.logger.warning(

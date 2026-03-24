@@ -101,8 +101,8 @@ class AppConfig(BaseModel):
     input_adapters: list[AdapterConfig] = Field(
         default_factory=lambda: [
             AdapterConfig(
-                type="fritz",
-                name="fritz",
+                type="fritz_callmonitor",
+                name="fritz_callmonitor",
                 enabled=True,
                 config={"host": "192.168.178.1", "port": 1012},
             ),
@@ -129,6 +129,7 @@ class AppConfig(BaseModel):
                 config={"path": "contacts.json"},
             ),
             AdapterConfig(type="sqlite", name="sqlite", enabled=True),
+            AdapterConfig(type="msn", name="msn", enabled=True),
             AdapterConfig(
                 type="tellows", name="tellows", enabled=True, config={"ttl_days": 7}
             ),

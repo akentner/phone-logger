@@ -1,7 +1,7 @@
 """Tests for LineState serialization in webhook and MQTT output adapters."""
 
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -50,7 +50,7 @@ def _make_line_state(**overrides) -> LineState:
         "direction": CallDirection.INBOUND,
         "trunk_id": "SIP0",
         "is_internal": False,
-        "since": datetime(2026, 3, 19, 10, 0, 0),
+        "since": datetime(2026, 3, 19, 10, 0, 0, tzinfo=UTC),
     }
     defaults.update(overrides)
     return LineState(**defaults)
@@ -79,19 +79,25 @@ class TestSerializeLineState:
         assert result["direction"] == "inbound"
         assert result["trunk_id"] == "SIP0"
         assert result["is_internal"] is False
-        assert result["since"] == "2026-03-19T10:00:00"
+        assert result["since"] == "2026-03-19T10:00:00+00:00"
 
     def test_device_serialized(self):
         device = DeviceInfo(id="1", extension="10", name="Telefon Flur", type="dect")
-        ls = _make_line_state(device=device)
+        ls = _make_line_state(caller_device=device)
         result = _serialize_line_state(ls)
 
-        assert result["device"] == {"id": "1", "name": "Telefon Flur", "type": "dect"}
+        assert result["caller_device"] == {
+            "id": "1",
+            "name": "Telefon Flur",
+            "type": "dect",
+        }
+        assert result["called_device"] is None
 
     def test_device_none(self):
-        ls = _make_line_state(device=None)
+        ls = _make_line_state(caller_device=None, called_device=None)
         result = _serialize_line_state(ls)
-        assert result["device"] is None
+        assert result["caller_device"] is None
+        assert result["called_device"] is None
 
     def test_direction_none(self):
         ls = _make_line_state(direction=None)
