@@ -18,7 +18,7 @@ def create_app(lifespan=None) -> FastAPI:
     app = FastAPI(
         title="phone-logger",
         description="Phone number resolver with Fritz!Box Callmonitor integration",
-        version="0.3.4",
+        version="0.3.5",
         lifespan=lifespan,
     )
 

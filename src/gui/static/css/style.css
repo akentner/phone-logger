@@ -637,6 +637,11 @@ tr:hover {
         --shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
     }
 
+    .navbar {
+        background: #1c1c1c;
+        box-shadow: 0 1px 0 var(--border);
+    }
+
     .form-control {
         background: #2a2a2a;
         color: var(--text);
