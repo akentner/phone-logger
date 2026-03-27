@@ -16,7 +16,15 @@ jobs:
         run: |
           gh api repos/akentner/homeassistant-addons/dispatches \
             -X POST \
-            -f event_type=upstream-release \
-            -f client_payload='{"repository":"akentner/phone-logger","version":"${{ github.event.release.tag_name }}","addon":"phone-logger"}'
+            --input - <<EOF
+          {
+            "event_type": "upstream-release",
+            "client_payload": {
+              "repository": "akentner/phone-logger",
+              "version": "${{ github.event.release.tag_name }}",
+              "addon": "phone-logger"
+            }
+          }
+          EOF
         env:
           GH_TOKEN: ${{ secrets.ADDON_SYNC_TOKEN }}
