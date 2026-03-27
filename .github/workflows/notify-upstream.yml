@@ -19,4 +19,4 @@ jobs:
             -f event_type=upstream-release \
             -f client_payload='{"repository":"akentner/phone-logger","version":"${{ github.event.release.tag_name }}","addon":"phone-logger"}'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.ADDON_SYNC_TOKEN }}
