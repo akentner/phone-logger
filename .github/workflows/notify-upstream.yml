@@ -1,0 +1,22 @@
+name: Notify upstream addon repository
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Trigger addon sync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger addon repository workflow
+        run: |
+          gh api repos/akentner/homeassistant-addons/dispatches \
+            -X POST \
+            -f event_type=upstream-release \
+            -f client_payload='{"repository":"akentner/phone-logger","version":"${{ github.event.release.tag_name }}","addon":"phone-logger"}'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
