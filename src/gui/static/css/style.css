@@ -615,6 +615,14 @@ tr:hover {
     margin-right: 0.3rem;
 }
 
+/* Footer */
+.app-footer {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
 /* Dark Mode */
 @media (prefers-color-scheme: dark) {
     :root {
