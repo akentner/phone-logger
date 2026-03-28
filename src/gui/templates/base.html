@@ -4,6 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>phone-logger - {% block title %}{% endblock %}</title>
+    <script>
+        // Dark mode detection — runs before CSS to avoid flash of wrong theme.
+        // 1) OS / browser preference via matchMedia
+        // 2) HA ingress fallback: check background-color that HA injects into the iframe
+        (function() {
+            var isDark = false;
+            // Primary: OS-level dark mode preference
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                isDark = true;
+            }
+            // HA ingress fallback: HA sets --primary-background-color on the iframe body.
+            // In dark themes this is a dark color (luminance < 0.5).
+            // We also check the body background-color computed style once the DOM is ready.
+            if (!isDark && /\/api\/hassio_ingress\//.test(window.location.pathname)) {
+                // Try to detect via HA-injected CSS custom property on the document
+                var bg = getComputedStyle(document.documentElement).getPropertyValue('--primary-background-color');
+                if (bg) {
+                    // Parse rgb(r,g,b) and check luminance
+                    var m = bg.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+                    if (m) {
+                        var lum = (0.299 * parseInt(m[1]) + 0.587 * parseInt(m[2]) + 0.114 * parseInt(m[3])) / 255;
+                        if (lum < 0.5) isDark = true;
+                    }
+                }
+            }
+            if (isDark) {
+                document.documentElement.classList.add('dark');
+            }
+            // Listen for OS preference changes (e.g. user toggles system dark mode)
+            if (window.matchMedia) {
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+                    document.documentElement.classList.toggle('dark', e.matches);
+                });
+            }
+        })();
+    </script>
     <link rel="stylesheet" id="main-css" href="/static/css/style.css">
 </head>
 <body>
@@ -40,6 +76,18 @@
             document.querySelectorAll('a[data-path]').forEach(a => {
                 a.href = INGRESS_PATH + a.dataset.path;
             });
+            // HA ingress dark mode re-check: HA may inject --primary-background-color
+            // on the document after initial load. Re-evaluate if not already dark.
+            if (!document.documentElement.classList.contains('dark')) {
+                var bg = getComputedStyle(document.documentElement).getPropertyValue('--primary-background-color');
+                if (bg) {
+                    var m = bg.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+                    if (m) {
+                        var lum = (0.299 * parseInt(m[1]) + 0.587 * parseInt(m[2]) + 0.114 * parseInt(m[3])) / 255;
+                        if (lum < 0.5) document.documentElement.classList.add('dark');
+                    }
+                }
+            }
         }
         
         // I18n support
