@@ -1,6 +1,6 @@
 [project]
 name = "phone-logger"
-version = "0.3.6"
+version = "0.3.7"
 description = "Phone number resolver with Fritz!Box Callmonitor integration for Home Assistant"
 requires-python = ">=3.12"
 dependencies = [
