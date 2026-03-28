@@ -202,6 +202,20 @@ class Pipeline:
             event.line_id,
         )
 
+        # 3b. Notify output adapters of line state change (before resolve)
+        if event.line_id is not None:
+            line_state_early = self.pbx.get_line_state(event.line_id)
+            if line_state_early is not None:
+                for adapter in self._output_adapters:
+                    try:
+                        await adapter.handle_line_state_change(line_state_early)
+                    except Exception:
+                        logger.exception(
+                            "Output adapter '%s' failed for line state change on line %d",
+                            adapter.name,
+                            event.line_id,
+                        )
+
         # 4. Enrich event from LineState (for CONNECT/DISCONNECT which lack call details)
         if event.event_type in (CallEventType.CONNECT, CallEventType.DISCONNECT):
             line_state = (

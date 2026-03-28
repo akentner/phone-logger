@@ -71,6 +71,16 @@ class BaseOutputAdapter(ABC):
     ) -> None:
         """Handle a processed call event with its resolve result and optional PBX line state."""
 
+    async def handle_line_state_change(
+        self, line_state: "LineState"
+    ) -> None:
+        """Handle a line state change immediately (before resolve).
+
+        Called right after the PBX FSM transitions, before the resolver runs.
+        Override to publish state updates with minimal latency.
+        Default implementation does nothing.
+        """
+
     async def start(self) -> None:
         """Optional initialization."""
 

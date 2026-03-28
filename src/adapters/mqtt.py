@@ -21,7 +21,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _serialize_line_state(line_state: Optional["LineState"]) -> Optional[dict]:
+def _serialize_line_state(
+    line_state: Optional["LineState"],
+    caller_display: Optional[str] = None,
+    called_display: Optional[str] = None,
+) -> Optional[dict]:
     """Serialize a LineState to a JSON-friendly dict, or None if absent."""
     if line_state is None:
         return None
@@ -37,6 +41,8 @@ def _serialize_line_state(line_state: Optional["LineState"]) -> Optional[dict]:
         "connection_id": line_state.connection_id,
         "caller_number": line_state.caller_number,
         "called_number": line_state.called_number,
+        "caller_display": caller_display,
+        "called_display": called_display,
         "direction": line_state.direction.value if line_state.direction else None,
         "trunk_id": line_state.trunk_id,
         "caller_device": _device_dict(line_state.caller_device),
@@ -297,6 +303,38 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
     # Output: publish resolved events (publish path)
     # ------------------------------------------------------------------
 
+    async def handle_line_state_change(
+        self, line_state: "LineState"
+    ) -> None:
+        """Publish line state immediately (before resolve).
+
+        Publishes the line state without display names so subscribers get
+        the state change with minimal latency. The subsequent handle() call
+        will publish again with resolved display names.
+        """
+        if self._client is None:
+            return
+
+        current_status = line_state.status.value
+        if current_status == self._last_line_status.get(line_state.line_id):
+            return  # No change
+
+        state_payload = json.dumps(_serialize_line_state(line_state))
+        try:
+            await self._client.publish(
+                f"{self._topic_prefix}/line/{line_state.line_id}/state",
+                state_payload,
+                qos=self._qos,
+                retain=True,
+            )
+            self.logger.debug(
+                "MQTT line state (early): line/%d/state -> %s",
+                line_state.line_id,
+                current_status,
+            )
+        except Exception as exc:
+            self.logger.error("Failed to publish early line state: %s", exc)
+
     async def handle(
         self,
         event: CallEvent,
@@ -326,16 +364,26 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
             "line_state": _serialize_line_state(line_state),
         }
 
+        # Derive display names from resolve result for the remote party
+        caller_display: Optional[str] = None
+        called_display: Optional[str] = None
+        if line_state is not None and result is not None and result.name:
+            if line_state.direction and line_state.direction.value == "inbound":
+                caller_display = result.name
+            else:
+                called_display = result.name
+
         topic_base = self._topic_prefix
         message = json.dumps(payload)
 
-        # Detect line state change
-        line_state_changed = False
+        # Check if we have display names to enrich the line state with.
+        # The early publish (handle_line_state_change) already sent the state
+        # without display names, so we only re-publish if we can add them.
+        has_display_names = caller_display is not None or called_display is not None
+
+        # Update line status tracker (keeps handle_line_state_change in sync)
         if line_state is not None and line_state.line_id is not None:
-            current_status = line_state.status.value
-            if current_status != self._last_line_status.get(line_state.line_id):
-                line_state_changed = True
-                self._last_line_status[line_state.line_id] = current_status
+            self._last_line_status[line_state.line_id] = line_state.status.value
 
         # Detect trunk state changes — use PbxStateManager for correct multi-line status
         trunk_changes: list[tuple[str, str]] = []  # [(trunk_id, status), ...]
@@ -371,8 +419,10 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
                 retain=self._retain,
             )
 
-            if line_state_changed and line_state is not None:
-                state_payload = json.dumps(_serialize_line_state(line_state))
+            if has_display_names and line_state is not None:
+                state_payload = json.dumps(
+                    _serialize_line_state(line_state, caller_display, called_display)
+                )
                 await client.publish(
                     f"{topic_base}/line/{line_state.line_id}/state",
                     state_payload,
@@ -380,10 +430,10 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
                     retain=True,
                 )
                 self.logger.debug(
-                    "MQTT line state: %s/line/%d/state -> %s",
-                    topic_base,
+                    "MQTT line state (enriched): line/%d/state -> %s [%s]",
                     line_state.line_id,
                     line_state.status.value,
+                    caller_display or called_display,
                 )
 
             for t_id, t_status in trunk_changes:
