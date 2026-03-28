@@ -399,45 +399,53 @@ tr:hover {
     transition: all 0.3s;
 }
 
+/* SVG icons in line status */
+.pbx-icon {
+    width: 1em;
+    height: 1em;
+    fill: currentColor;
+    vertical-align: -0.125em;
+}
+
 .pbx-line-card.pbx-line-idle {
     background: var(--bg);
     opacity: 0.7;
 }
 
 .pbx-line-card.pbx-line-ring {
-    background: #fff8e1;
-    border-color: #ffca28;
+    background: #e8f2fa;
+    border-color: #3092dc;
     animation: pbx-pulse 1.5s ease-in-out infinite;
 }
 
 .pbx-line-card.pbx-line-call {
-    background: #e3f2fd;
-    border-color: var(--primary);
+    background: #eef5e8;
+    border-color: #8bbf68;
 }
 
 .pbx-line-card.pbx-line-talking {
     background: #e8f5e9;
-    border-color: var(--success);
+    border-color: #4caf50;
 }
 
 .pbx-line-card.pbx-line-finished {
-    background: #f3e5f5;
-    border-color: #9c27b0;
+    background: var(--bg);
+    border-color: var(--border);
 }
 
 .pbx-line-card.pbx-line-missed {
-    background: #ffebee;
-    border-color: var(--danger);
+    background: #fde9e4;
+    border-color: #e45f3b;
 }
 
 .pbx-line-card.pbx-line-notReached {
-    background: #fff3e0;
-    border-color: var(--warning);
+    background: #fde9e4;
+    border-color: #e45f3b;
 }
 
 @keyframes pbx-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 202, 40, 0.4); }
-    50% { box-shadow: 0 0 0 6px rgba(255, 202, 40, 0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(48, 146, 220, 0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(48, 146, 220, 0); }
 }
 
 .pbx-line-header {
@@ -624,148 +632,146 @@ tr:hover {
     font-size: 0.8rem;
 }
 
-/* Dark Mode */
-@media (prefers-color-scheme: dark) {
-    :root {
-        color-scheme: dark;
-        --primary: #29b6f6;
-        --primary-dark: #0288d1;
-        --bg: #111111;
-        --surface: #1c1c1c;
-        --text: #e8e8e8;
-        --text-secondary: #9e9e9e;
-        --border: #2e2e2e;
-        --shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-        --navbar-bg: #1c1c1c;
-    }
+/* Dark Mode — applied via html.dark class (set by JS in <head>) */
+html.dark {
+    color-scheme: dark;
+    --primary: #29b6f6;
+    --primary-dark: #0288d1;
+    --bg: #111111;
+    --surface: #1c1c1c;
+    --text: #e8e8e8;
+    --text-secondary: #9e9e9e;
+    --border: #2e2e2e;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    --navbar-bg: #1c1c1c;
+}
 
-    .form-control {
-        background: #2a2a2a;
-        color: var(--text);
-    }
+html.dark .form-control {
+    background: #2a2a2a;
+    color: var(--text);
+}
 
-    tr:hover {
-        background: rgba(255, 255, 255, 0.04);
-    }
+html.dark tr:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
 
-    .tag {
-        background: #0d2a3a;
-        color: #29b6f6;
-    }
+html.dark .tag {
+    background: #0d2a3a;
+    color: #29b6f6;
+}
 
-    .tag-spam {
-        background: #3a0d0d;
-        color: #ef5350;
-    }
+html.dark .tag-spam {
+    background: #3a0d0d;
+    color: #ef5350;
+}
 
-    .spam-score-low {
-        background: #0d2e11;
-        color: #66bb6a;
-    }
+html.dark .spam-score-low {
+    background: #0d2e11;
+    color: #66bb6a;
+}
 
-    .spam-score-mid {
-        background: #2e1900;
-        color: #ffa726;
-    }
+html.dark .spam-score-mid {
+    background: #2e1900;
+    color: #ffa726;
+}
 
-    .spam-score-high {
-        background: #3a0d0d;
-        color: #ef5350;
-    }
+html.dark .spam-score-high {
+    background: #3a0d0d;
+    color: #ef5350;
+}
 
-    .number-type-private {
-        background: #0d2a3a;
-        color: #42a5f5;
-    }
+html.dark .number-type-private {
+    background: #0d2a3a;
+    color: #42a5f5;
+}
 
-    .number-type-business {
-        background: #2a0d3a;
-        color: #ce93d8;
-    }
+html.dark .number-type-business {
+    background: #2a0d3a;
+    color: #ce93d8;
+}
 
-    .number-type-mobile {
-        background: #0d2e11;
-        color: #66bb6a;
-    }
+html.dark .number-type-mobile {
+    background: #0d2e11;
+    color: #66bb6a;
+}
 
-    .alert-success {
-        background: #0d2e11;
-        color: #66bb6a;
-        border-color: #1b5e20;
-    }
+html.dark .alert-success {
+    background: #0d2e11;
+    color: #66bb6a;
+    border-color: #1b5e20;
+}
 
-    .alert-error {
-        background: #3a0d0d;
-        color: #ef5350;
-        border-color: #7f1010;
-    }
+html.dark .alert-error {
+    background: #3a0d0d;
+    color: #ef5350;
+    border-color: #7f1010;
+}
 
-    /* PBX line states */
-    .pbx-line-card.pbx-line-ring {
-        background: #2a2000;
-        border-color: #ffca28;
-    }
+/* PBX line states */
+html.dark .pbx-line-card.pbx-line-ring {
+    background: #0d1e2a;
+    border-color: #3092dc;
+}
 
-    .pbx-line-card.pbx-line-call {
-        background: #0d1e2a;
-        border-color: var(--primary);
-    }
+html.dark .pbx-line-card.pbx-line-call {
+    background: #152010;
+    border-color: #8bbf68;
+}
 
-    .pbx-line-card.pbx-line-talking {
-        background: #0d2011;
-        border-color: var(--success);
-    }
+html.dark .pbx-line-card.pbx-line-talking {
+    background: #0d2011;
+    border-color: #4caf50;
+}
 
-    .pbx-line-card.pbx-line-finished {
-        background: #1e0d2a;
-        border-color: #9c27b0;
-    }
+html.dark .pbx-line-card.pbx-line-finished {
+    background: var(--bg);
+    border-color: var(--border);
+}
 
-    .pbx-line-card.pbx-line-missed {
-        background: #2a0d0d;
-        border-color: var(--danger);
-    }
+html.dark .pbx-line-card.pbx-line-missed {
+    background: #2a1510;
+    border-color: #e45f3b;
+}
 
-    .pbx-line-card.pbx-line-notReached {
-        background: #2a1800;
-        border-color: var(--warning);
-    }
+html.dark .pbx-line-card.pbx-line-notReached {
+    background: #2a1510;
+    border-color: #e45f3b;
+}
 
-    .pbx-trunk-busy {
-        background: #2a2000;
-        border-color: #ffca28;
-    }
+html.dark .pbx-trunk-busy {
+    background: #2a2000;
+    border-color: #ffca28;
+}
 
-    .pbx-internal-badge {
-        background: #1a1d3a;
-        color: #7986cb;
-    }
+html.dark .pbx-internal-badge {
+    background: #1a1d3a;
+    color: #7986cb;
+}
 
-    /* Device type badges */
-    .pbx-device-dect {
-        background: #0d2a3a;
-        color: #42a5f5;
-    }
+/* Device type badges */
+html.dark .pbx-device-dect {
+    background: #0d2a3a;
+    color: #42a5f5;
+}
 
-    .pbx-device-voip {
-        background: #0d2e11;
-        color: #66bb6a;
-    }
+html.dark .pbx-device-voip {
+    background: #0d2e11;
+    color: #66bb6a;
+}
 
-    .pbx-device-analog {
-        background: #2a0d3a;
-        color: #ce93d8;
-    }
+html.dark .pbx-device-analog {
+    background: #2a0d3a;
+    color: #ce93d8;
+}
 
-    .pbx-device-fax {
-        background: #2a1800;
-        color: #ffa726;
-    }
+html.dark .pbx-device-fax {
+    background: #2a1800;
+    color: #ffa726;
+}
 
-    .pbx-device-voicebox {
-        background: #2a0d1a;
-        color: #f48fb1;
-    }
+html.dark .pbx-device-voicebox {
+    background: #2a0d1a;
+    color: #f48fb1;
 }
 
 /* Responsive */
