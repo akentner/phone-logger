@@ -1,0 +1,107 @@
+version: '3'
+
+vars:
+  REPO: akentner/phone-logger
+  ADDON_REPO: akentner/homeassistant-addons
+  HA_APP_SLUG: 72a005f5_phone-logger
+
+tasks:
+  # --- Development ---
+
+  install:
+    desc: Install dependencies
+    cmd: uv sync
+
+  dev:
+    desc: Run server with dev config
+    cmd: uv run python -m src.main
+    env:
+      PHONE_LOGGER_CONFIG: config.dev.yaml
+
+  test:
+    desc: Run all tests
+    cmd: uv run python -m pytest tests/ -v
+
+  test:file:
+    desc: Run a single test file (e.g. task test:file -- test_pbx.py)
+    cmd: uv run python -m pytest tests/{{.CLI_ARGS}} -v
+
+  lint:
+    desc: Run ruff linter
+    cmd: uv run ruff check src/ tests/
+
+  fmt:
+    desc: Format code with ruff
+    cmd: uv run ruff format src/ tests/
+
+  # --- Release ---
+
+  version:
+    desc: Show current version
+    cmd: grep '^version' pyproject.toml | head -1
+
+  release:
+    desc: Bump version, commit, push and create GitHub release
+    requires:
+      vars: [VERSION]
+    cmds:
+      - sed -i 's/^version = .*/version = "{{.VERSION}}"/' pyproject.toml
+      - sed -i 's/version="[^"]*"/version="{{.VERSION}}"/' src/api/app.py
+      - uv lock
+      - git add pyproject.toml src/api/app.py uv.lock
+      - git commit -m "chore:\ bump version to {{.VERSION}}"
+      - git push origin main
+      - gh release create v{{.VERSION}} --title "v{{.VERSION}}" --generate-notes
+
+  # --- CI / Pipeline Status ---
+
+  ci:status:
+    desc: Show latest workflow runs for phone-logger
+    cmd: gh run list -R {{.REPO}} --limit 5
+
+  ci:build:
+    desc: Show latest build status
+    cmd: gh run list -R {{.REPO}} --workflow build.yml --limit 3
+
+  ci:notify:
+    desc: Show latest app notify status
+    cmd: gh run list -R {{.REPO}} --workflow notify-upstream.yml --limit 3
+
+  ci:sync:
+    desc: Show latest app sync status
+    cmd: gh run list -R {{.ADDON_REPO}} --workflow sync-upstream.yml --limit 3
+
+  ci:all:
+    desc: Show pipeline status (build + notify + app sync)
+    cmds:
+      - echo "=== Build ===" && gh run list -R {{.REPO}} --workflow build.yml --limit 1
+      - echo "=== Notify ===" && gh run list -R {{.REPO}} --workflow notify-upstream.yml --limit 1
+      - echo "=== Addon Sync ===" && gh run list -R {{.ADDON_REPO}} --workflow sync-upstream.yml --limit 1
+
+  # --- Home Assistant ---
+
+  ha:reload:
+    desc: Reload HA app store
+    cmd: ha store reload
+
+  ha:update:
+    desc: Update phone-logger app on HA
+    cmds:
+      - ha store reload
+      - ha apps update {{.HA_APP_SLUG}}
+
+  ha:restart:
+    desc: Restart phone-logger app on HA
+    cmd: ha apps restart {{.HA_APP_SLUG}}
+
+  ha:logs:
+    desc: Show phone-logger app logs
+    cmd: ha apps logs {{.HA_APP_SLUG}}
+
+  ha:info:
+    desc: Show phone-logger app info
+    cmd: ha apps info {{.HA_APP_SLUG}}
+
+  ha:version:
+    desc: Show installed version and state
+    cmd: ha apps info {{.HA_APP_SLUG}} | grep -E "^(version|version_latest|state):"
