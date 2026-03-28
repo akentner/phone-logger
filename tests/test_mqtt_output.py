@@ -175,6 +175,117 @@ class TestHandleEventTopics:
 
 
 # ---------------------------------------------------------------------------
+# MSN field in event payload
+# ---------------------------------------------------------------------------
+
+
+class TestMsnField:
+    @pytest.mark.asyncio
+    async def test_msn_from_pbx_reverse_lookup_inbound(self):
+        """Inbound: MSN derived from called_number via PBX reverse map."""
+        fake_pbx = MagicMock()
+        fake_pbx.e164_to_msn.return_value = "990133"
+        fake_pbx.get_trunk_status.return_value = []
+
+        adapter = _make_adapter(pbx=fake_pbx)
+        published = _inject_client(adapter)
+
+        event = _make_event(
+            direction=CallDirection.INBOUND,
+            caller_number="+491234567890",
+            called_number="+496181990133",
+        )
+        await adapter.handle(event, None)
+
+        payload = json.loads(
+            next(p[1] for p in published if p[0] == "phone-logger/event")
+        )
+        assert payload["msn"] == "990133"
+        fake_pbx.e164_to_msn.assert_called_with("+496181990133")
+
+    @pytest.mark.asyncio
+    async def test_msn_from_pbx_reverse_lookup_outbound(self):
+        """Outbound: MSN derived from caller_number via PBX reverse map."""
+        fake_pbx = MagicMock()
+        fake_pbx.e164_to_msn.return_value = "990133"
+        fake_pbx.get_trunk_status.return_value = []
+
+        adapter = _make_adapter(pbx=fake_pbx)
+        published = _inject_client(adapter)
+
+        event = _make_event(
+            direction=CallDirection.OUTBOUND,
+            caller_number="+496181990133",
+            called_number="+491234567890",
+        )
+        await adapter.handle(event, None)
+
+        payload = json.loads(
+            next(p[1] for p in published if p[0] == "phone-logger/event")
+        )
+        assert payload["msn"] == "990133"
+        fake_pbx.e164_to_msn.assert_called_with("+496181990133")
+
+    @pytest.mark.asyncio
+    async def test_msn_fallback_to_local(self):
+        """Without PBX, MSN derived via to_local() from app_config."""
+        from src.config import PhoneConfig
+
+        app_config = _make_app_config()
+        app_config.phone = PhoneConfig(country_code="49", local_area_code="6181")
+
+        adapter = _make_adapter(app_config=app_config)
+        published = _inject_client(adapter)
+
+        event = _make_event(
+            direction=CallDirection.INBOUND,
+            caller_number="+491234567890",
+            called_number="+496181990133",
+        )
+        await adapter.handle(event, None)
+
+        payload = json.loads(
+            next(p[1] for p in published if p[0] == "phone-logger/event")
+        )
+        assert payload["msn"] == "990133"
+
+    @pytest.mark.asyncio
+    async def test_msn_none_without_config(self):
+        """Without PBX or app_config, MSN is None."""
+        adapter = _make_adapter()
+        published = _inject_client(adapter)
+
+        event = _make_event(
+            direction=CallDirection.INBOUND,
+            caller_number="+491234567890",
+            called_number="+496181990133",
+        )
+        await adapter.handle(event, None)
+
+        payload = json.loads(
+            next(p[1] for p in published if p[0] == "phone-logger/event")
+        )
+        assert payload["msn"] is None
+
+    @pytest.mark.asyncio
+    async def test_msn_none_when_number_missing(self):
+        """MSN is None when the relevant number field is empty."""
+        adapter = _make_adapter()
+        published = _inject_client(adapter)
+
+        event = _make_event(
+            direction=CallDirection.INBOUND,
+            called_number=None,
+        )
+        await adapter.handle(event, None)
+
+        payload = json.loads(
+            next(p[1] for p in published if p[0] == "phone-logger/event")
+        )
+        assert payload["msn"] is None
+
+
+# ---------------------------------------------------------------------------
 # Line state topic
 # ---------------------------------------------------------------------------
 

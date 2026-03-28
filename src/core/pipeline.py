@@ -413,7 +413,7 @@ class Pipeline:
                 self._output_adapters.append(adapter)
 
             elif adapter_type == "webhook":
-                adapter = WebhookOutputAdapter(adapter_config)
+                adapter = WebhookOutputAdapter(adapter_config, self.config)
                 self._output_adapters.append(adapter)
 
             elif adapter_type == "mqtt":

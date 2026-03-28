@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.core.phone_number import normalize, to_dialable, to_scrape_format
+from src.core.phone_number import normalize, to_dialable, to_local, to_scrape_format
 
 
 class TestNormalize:
@@ -103,3 +103,42 @@ class TestToScrapeFormat:
         result = to_scrape_format("+49301234567")
         assert " " not in result
         assert "-" not in result
+
+
+class TestToLocal:
+    """Tests for to_local() — E.164 to short subscriber number (MSN)."""
+
+    def test_strips_country_and_area_code(self):
+        assert (
+            to_local("+496181990133", country_code="49", local_area_code="6181")
+            == "990133"
+        )
+
+    def test_berlin_area_code(self):
+        assert (
+            to_local("+4930123456", country_code="49", local_area_code="30") == "123456"
+        )
+
+    def test_no_area_code_strips_country_only(self):
+        # Without local_area_code, strips only country code
+        assert to_local("+496181990133", country_code="49") == "6181990133"
+
+    def test_different_country(self):
+        assert (
+            to_local("+431123456", country_code="43", local_area_code="1") == "123456"
+        )
+
+    def test_no_match_returns_original(self):
+        # US number with German config — no match, returns as-is
+        assert (
+            to_local("+12125551234", country_code="49", local_area_code="30")
+            == "+12125551234"
+        )
+
+    def test_already_local_returns_as_is(self):
+        assert to_local("990133", country_code="49", local_area_code="6181") == "990133"
+
+    def test_empty_area_code_strips_country(self):
+        assert (
+            to_local("+4930123456", country_code="49", local_area_code="") == "30123456"
+        )

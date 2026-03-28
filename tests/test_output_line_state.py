@@ -206,6 +206,80 @@ class TestWebhookLineState:
         assert payload["line_state"] is None
 
 
+# --- Webhook: MSN field ---
+
+
+class TestWebhookMsn:
+    @pytest.mark.asyncio
+    async def test_msn_inbound_with_app_config(self):
+        """Webhook payload should include short MSN derived from called_number."""
+        from src.config import AppConfig, PhoneConfig
+
+        app_config = AppConfig(
+            phone=PhoneConfig(country_code="49", local_area_code="6181")
+        )
+        config = AdapterConfig(
+            type="webhook",
+            name="test",
+            enabled=True,
+            config={"url": "https://example.com/hook"},
+        )
+        adapter = WebhookOutputAdapter(config, app_config)
+
+        event = _make_event(
+            direction=CallDirection.INBOUND,
+            caller_number="+491234567890",
+            called_number="+496181990133",
+        )
+
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = AsyncMock()
+        mock_session.post = MagicMock(return_value=mock_response)
+        adapter._session = mock_session
+
+        await adapter.handle(event, None, line_state=None)
+
+        call_args = mock_session.post.call_args
+        payload = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert payload["msn"] == "990133"
+
+    @pytest.mark.asyncio
+    async def test_msn_none_without_app_config(self):
+        """Webhook payload should have msn: null without app_config."""
+        config = AdapterConfig(
+            type="webhook",
+            name="test",
+            enabled=True,
+            config={"url": "https://example.com/hook"},
+        )
+        adapter = WebhookOutputAdapter(config)
+
+        event = _make_event(
+            direction=CallDirection.INBOUND,
+            caller_number="+491234567890",
+            called_number="+496181990133",
+        )
+
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = AsyncMock()
+        mock_session.post = MagicMock(return_value=mock_response)
+        adapter._session = mock_session
+
+        await adapter.handle(event, None, line_state=None)
+
+        call_args = mock_session.post.call_args
+        payload = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert payload["msn"] is None
+
+
 # --- MQTT: line_state in event payload + dedicated topic ---
 
 

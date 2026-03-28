@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING, Optional
 import aiohttp
 
 from src.adapters.base import BaseOutputAdapter
-from src.config import AdapterConfig
-from src.core.event import CallEvent, ResolveResult
+from src.config import AdapterConfig, AppConfig
+from src.core import phone_number as pn
+from src.core.event import CallDirection, CallEvent, ResolveResult
 
 if TYPE_CHECKING:
     from src.core.pbx import LineState
@@ -88,7 +89,9 @@ class WebhookOutputAdapter(BaseOutputAdapter):
           - state:finished
     """
 
-    def __init__(self, config: AdapterConfig) -> None:
+    def __init__(
+        self, config: AdapterConfig, app_config: Optional[AppConfig] = None
+    ) -> None:
         super().__init__(config)
         self._url = config.config.get("url", "")
         self._token = config.config.get("token", "")
@@ -96,6 +99,7 @@ class WebhookOutputAdapter(BaseOutputAdapter):
             "events", ["ring", "call", "connect", "disconnect"]
         )
         self._session: Optional[aiohttp.ClientSession] = None
+        self._app_config = app_config
 
     async def start(self) -> None:
         """Create HTTP session."""
@@ -107,6 +111,32 @@ class WebhookOutputAdapter(BaseOutputAdapter):
             timeout=aiohttp.ClientTimeout(total=10),
         )
         self.logger.info("Webhook adapter started (URL: %s)", self._url)
+
+    def _derive_msn(self, event: CallEvent) -> str | None:
+        """Derive the short local MSN from the event direction.
+
+        Inbound: the local MSN is called_number.
+        Outbound: the local MSN is caller_number.
+
+        Uses ``pn.to_local()`` with configured country/area code.
+        """
+        if event.direction == CallDirection.INBOUND:
+            e164 = event.called_number
+        else:
+            e164 = event.caller_number
+
+        if not e164:
+            return None
+
+        if self._app_config is not None:
+            phone_cfg = self._app_config.phone
+            return pn.to_local(
+                e164,
+                country_code=phone_cfg.country_code,
+                local_area_code=phone_cfg.local_area_code,
+            )
+
+        return None
 
     async def stop(self) -> None:
         """Close HTTP session."""
@@ -140,10 +170,13 @@ class WebhookOutputAdapter(BaseOutputAdapter):
             self.logger.error("HTTP session not initialized")
             return
 
+        msn = self._derive_msn(event)
+
         payload = {
             "number": event.number,
             "caller_number": event.caller_number,
             "called_number": event.called_number,
+            "msn": msn,
             "direction": event.direction.value,
             "event_type": event.event_type.value,
             "line_id": event.line_id,

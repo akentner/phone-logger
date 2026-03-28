@@ -479,3 +479,10 @@ class PbxStateManager:
             "msns": self.get_msns_e164(),
             "devices": [d.model_dump() for d in self._config.devices],
         }
+
+    def e164_to_msn(self, e164: str) -> str | None:
+        """Reverse-lookup: convert an E.164 number to the short MSN, or None."""
+        for raw_msn, mapped_e164 in self._msn_e164_map.items():
+            if mapped_e164 == e164:
+                return raw_msn
+        return None

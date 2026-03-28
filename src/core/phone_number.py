@@ -117,6 +117,30 @@ def to_dialable(e164: str, country_code: str = "49") -> str:
     return e164
 
 
+def to_local(
+    e164: str,
+    country_code: str = "49",
+    local_area_code: str = "",
+) -> str:
+    """
+    Strip the country code and local area code from an E.164 number,
+    returning the short subscriber number (MSN).
+
+    +496181990133  (country_code="49", local_area_code="6181") -> "990133"
+    +4930123456    (country_code="49", local_area_code="30")   -> "123456"
+
+    If the number doesn't match the expected prefix, returns the original number.
+    """
+    prefix = "+" + country_code + local_area_code
+    if local_area_code and e164.startswith(prefix):
+        return e164[len(prefix) :]
+    # No area code or no match — fall back to stripping just the country code
+    cc_prefix = "+" + country_code
+    if e164.startswith(cc_prefix):
+        return e164[len(cc_prefix) :]
+    return e164
+
+
 def to_scrape_format(e164: str, country_code: str = "49") -> str:
     """
     Convert an E.164 number to the format expected by German reverse-lookup sites.

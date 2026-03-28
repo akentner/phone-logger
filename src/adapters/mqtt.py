@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Callable, Coroutine, Optional
 from src.adapters.base import BaseInputAdapter, BaseOutputAdapter
 from src.config import AdapterConfig, AppConfig
 from src.core.event import CallDirection, CallEvent, CallEventType, ResolveResult
+from src.core import phone_number as pn
 
 if TYPE_CHECKING:
     from src.core.pbx import LineState, PbxStateManager
@@ -303,9 +304,41 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
     # Output: publish resolved events (publish path)
     # ------------------------------------------------------------------
 
-    async def handle_line_state_change(
-        self, line_state: "LineState"
-    ) -> None:
+    def _derive_msn(self, event: CallEvent) -> str | None:
+        """Derive the short local MSN from the event direction.
+
+        Inbound: the local MSN is called_number.
+        Outbound: the local MSN is caller_number.
+
+        Uses PBX reverse map (E.164 -> raw MSN) when available,
+        otherwise falls back to ``pn.to_local()``.
+        """
+        if event.direction == CallDirection.INBOUND:
+            e164 = event.called_number
+        else:
+            e164 = event.caller_number
+
+        if not e164:
+            return None
+
+        # Prefer PBX authoritative reverse lookup
+        if self._pbx is not None:
+            short = self._pbx.e164_to_msn(e164)
+            if short:
+                return short
+
+        # Fallback: strip country + area code via phone_number helper
+        if self._app_config is not None:
+            phone_cfg = self._app_config.phone
+            return pn.to_local(
+                e164,
+                country_code=phone_cfg.country_code,
+                local_area_code=phone_cfg.local_area_code,
+            )
+
+        return None
+
+    async def handle_line_state_change(self, line_state: "LineState") -> None:
         """Publish line state immediately (before resolve).
 
         Publishes the line state without display names so subscribers get
@@ -351,6 +384,9 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
 
         payload = {
             "number": event.number,
+            "caller_number": event.caller_number,
+            "called_number": event.called_number,
+            "msn": self._derive_msn(event),
             "direction": event.direction.value,
             "event_type": event.event_type.value,
             "timestamp": event.timestamp.isoformat(),

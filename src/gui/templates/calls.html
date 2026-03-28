@@ -37,6 +37,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% include '_icons.html' %}
 <script>
     let currentView = 'history'; // 'history' or 'events'
     const limit = 50;
@@ -154,8 +155,8 @@
                         </span>
                     </td>
                     <td>
-                        <span class="${isInbound ? 'direction-in' : 'direction-out'}">
-                            ${isInbound ? '&#x2199;&#xFE0F; Eingehend' : '&#x2197;&#xFE0F; Ausgehend'}
+                        <span class="${isInbound ? 'direction-in' : 'direction-out'}" style="color: ${isInbound ? '#3092dc' : '#8bbf68'}">
+                            ${isInbound ? LINE_STATUS_ICONS.inbound : LINE_STATUS_ICONS.outgoing} ${isInbound ? 'Eingehend' : 'Ausgehend'}
                         </span>
                     </td>
                     <td title="${esc(c.caller_number)}"><strong>${esc(callerDisplay)}</strong></td>
@@ -189,8 +190,8 @@
                 <tr>
                     <td>${formatDate(c.timestamp)}</td>
                     <td>
-                        <span class="${c.direction === 'inbound' ? 'direction-in' : 'direction-out'}">
-                            ${c.direction === 'inbound' ? '&#x2199;&#xFE0F; Eingehend' : '&#x2197;&#xFE0F; Ausgehend'}
+                        <span class="${c.direction === 'inbound' ? 'direction-in' : 'direction-out'}" style="color: ${c.direction === 'inbound' ? '#3092dc' : '#8bbf68'}">
+                            ${c.direction === 'inbound' ? LINE_STATUS_ICONS.inbound : LINE_STATUS_ICONS.outgoing} ${c.direction === 'inbound' ? 'Eingehend' : 'Ausgehend'}
                         </span>
                     </td>
                     <td>${c.event_type}</td>
@@ -213,14 +214,17 @@
     }
 
     function getStatusLabel(status) {
+        const entry = CALL_STATUS_MAP[status];
+        if (!entry) return status;
+        const icon = LINE_STATUS_ICONS[entry.icon] || '';
         const labels = {
-            'ringing': '&#x1F4DE; Klingelt',
-            'dialing': '&#x1F4F1; W&auml;hlt',
-            'answered': '&#x2705; Beantwortet',
-            'missed': '&#x274C; Verpasst',
-            'notReached': '&#x1F6AB; Nicht erreichbar'
+            'ringing': 'Klingelt',
+            'dialing': 'W\u00e4hlt',
+            'answered': 'Beantwortet',
+            'missed': 'Verpasst',
+            'notReached': 'Nicht erreichbar'
         };
-        return labels[status] || status;
+        return `<span style="color: ${entry.color}">${icon}</span> ${labels[status] || status}`;
     }
 
     function formatDuration(seconds) {
