@@ -301,6 +301,14 @@ class Pipeline:
         )
         for adapter in self._output_adapters:
             try:
+                await adapter.handle_line_state_change(idle_state)
+            except Exception:
+                logger.exception(
+                    "Output adapter '%s' failed for idle line state change on line %d",
+                    adapter.name,
+                    line_id,
+                )
+            try:
                 await adapter.handle(
                     CallEvent(
                         number="",

@@ -203,6 +203,86 @@ async def test_pipeline_dispatches_idle_to_output_adapters():
     assert idle_event.line_id == 0
     assert idle_line_state.status == LineStatus.IDLE
 
+    # handle_line_state_change must also have been called for the idle transition
+    # (RING + DISCONNECT + idle = 3 calls to handle_line_state_change)
+    idle_lsc_calls = [
+        c
+        for c in mock_adapter.handle_line_state_change.call_args_list
+        if c[0][0].status == LineStatus.IDLE
+    ]
+    assert len(idle_lsc_calls) == 1, (
+        "handle_line_state_change should be called once with idle state"
+    )
+
+
+@pytest.mark.asyncio
+async def test_idle_reset_calls_handle_line_state_change():
+    """handle_line_state_change must be called on idle auto-reset so MQTT/webhooks update."""
+    phone = PhoneConfig(country_code="49", local_area_code="6181")
+    pbx_config = PbxConfig(trunks=[TrunkConfig(id="SIP0")])
+    config = AppConfig(
+        phone=phone,
+        pbx=pbx_config,
+        input_adapters=[],
+        resolver_adapters=[],
+        output_adapters=[],
+    )
+
+    mock_db = AsyncMock()
+    pipeline = Pipeline(config, mock_db)
+    await pipeline.setup()
+
+    mock_adapter = AsyncMock()
+    pipeline._output_adapters = [mock_adapter]
+
+    # Full call cycle: RING → CONNECT → DISCONNECT (finished)
+    ring_event = CallEvent(
+        number="+491234567890",
+        caller_number="+491234567890",
+        called_number="+496181123456",
+        direction=CallDirection.INBOUND,
+        event_type=CallEventType.RING,
+        source="test",
+        connection_id="0",
+        line_id=0,
+    )
+    await pipeline._on_event(ring_event)
+
+    connect_event = CallEvent(
+        number="",
+        direction=CallDirection.INBOUND,
+        event_type=CallEventType.CONNECT,
+        source="test",
+        connection_id="0",
+        line_id=0,
+    )
+    await pipeline._on_event(connect_event)
+
+    disconnect_event = CallEvent(
+        number="",
+        direction=CallDirection.INBOUND,
+        event_type=CallEventType.DISCONNECT,
+        source="test",
+        connection_id="0",
+        line_id=0,
+    )
+    await pipeline._on_event(disconnect_event)
+
+    # Before auto-reset: last handle_line_state_change should be "finished"
+    last_lsc = mock_adapter.handle_line_state_change.call_args_list[-1]
+    assert last_lsc[0][0].status == LineStatus.FINISHED
+
+    # Wait for auto-reset
+    await asyncio.sleep(1.5)
+
+    # After auto-reset: handle_line_state_change must have been called with idle
+    idle_lsc = mock_adapter.handle_line_state_change.call_args_list[-1]
+    assert idle_lsc[0][0].status == LineStatus.IDLE
+
+    # And the line should now be idle in the PBX state
+    state = pipeline.pbx.get_line_state(0)
+    assert state.status == LineStatus.IDLE
+
 
 @pytest.mark.asyncio
 async def test_webhook_filter_matches_state_idle():

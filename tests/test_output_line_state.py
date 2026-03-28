@@ -122,9 +122,15 @@ class TestSerializeLineState:
         assert result["last_changed"] is None
 
     def test_mqtt_serializer_same_output(self):
-        """Both webhook and MQTT use identical serialization logic."""
+        """MQTT serializer includes display name fields that webhook does not."""
         ls = _make_line_state()
-        assert _serialize_line_state(ls) == mqtt_serialize_line_state(ls)
+        webhook_result = _serialize_line_state(ls)
+        mqtt_result = mqtt_serialize_line_state(ls)
+
+        # MQTT adds caller_display/called_display (defaulting to None)
+        assert mqtt_result.pop("caller_display", None) is None
+        assert mqtt_result.pop("called_display", None) is None
+        assert webhook_result == mqtt_result
 
 
 # --- Webhook: line_state in payload ---
@@ -244,6 +250,7 @@ class TestMqttLineState:
 
         published = _inject_fake_client(adapter)
 
+        await adapter.handle_line_state_change(ls)
         await adapter.handle(event, None, line_state=ls)
 
         assert "phone-logger/line/0/state" in published
@@ -263,11 +270,13 @@ class TestMqttLineState:
 
         # First call: status changes from <none> to ring
         published = _inject_fake_client(adapter)
+        await adapter.handle_line_state_change(ls)
         await adapter.handle(event, None, line_state=ls)
         assert "phone-logger/line/0/state" in published
 
         # Second call with same status — state topic should NOT appear
         published.clear()
+        await adapter.handle_line_state_change(ls)
         await adapter.handle(event, None, line_state=ls)
 
         assert "phone-logger/event" in published
@@ -285,12 +294,14 @@ class TestMqttLineState:
         published = _inject_fake_client(adapter)
 
         # RING -> state published (new)
+        await adapter.handle_line_state_change(ls_ring)
         await adapter.handle(event_ring, None, line_state=ls_ring)
         assert "phone-logger/line/0/state" in published
 
         published.clear()
 
         # CONNECT -> state published (ring -> talking)
+        await adapter.handle_line_state_change(ls_talking)
         await adapter.handle(event_connect, None, line_state=ls_talking)
         assert "phone-logger/line/0/state" in published
 

@@ -186,6 +186,7 @@ class TestLineStateTopic:
         published = _inject_client(adapter)
         ls = _make_line_state(status=LineStatus.RING)
 
+        await adapter.handle_line_state_change(ls)
         await adapter.handle(_make_event(), None, line_state=ls)
 
         topics = [p[0] for p in published]
@@ -197,6 +198,7 @@ class TestLineStateTopic:
         published = _inject_client(adapter)
         ls = _make_line_state(status=LineStatus.RING)
 
+        await adapter.handle_line_state_change(ls)
         await adapter.handle(_make_event(), None, line_state=ls)
 
         state_pub = next(p for p in published if p[0] == "phone-logger/line/0/state")
@@ -207,13 +209,15 @@ class TestLineStateTopic:
         adapter = _make_adapter()
         ls = _make_line_state(status=LineStatus.RING)
 
-        # First call: status changes → published
+        # First call: status changes → published via handle_line_state_change
         published = _inject_client(adapter)
+        await adapter.handle_line_state_change(ls)
         await adapter.handle(_make_event(), None, line_state=ls)
         assert any(p[0] == "phone-logger/line/0/state" for p in published)
 
         # Second call: same status → NOT published
         published.clear()
+        await adapter.handle_line_state_change(ls)
         await adapter.handle(_make_event(), None, line_state=ls)
         assert not any(p[0] == "phone-logger/line/0/state" for p in published)
 
@@ -225,10 +229,12 @@ class TestLineStateTopic:
         ls_ring = _make_line_state(status=LineStatus.RING)
         ls_talking = _make_line_state(status=LineStatus.TALKING)
 
+        await adapter.handle_line_state_change(ls_ring)
         await adapter.handle(
             _make_event(event_type=CallEventType.RING), None, line_state=ls_ring
         )
         published.clear()
+        await adapter.handle_line_state_change(ls_talking)
         await adapter.handle(
             _make_event(event_type=CallEventType.CONNECT), None, line_state=ls_talking
         )
