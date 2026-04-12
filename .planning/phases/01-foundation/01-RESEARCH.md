@@ -73,6 +73,8 @@ For DEP-03 (unused deps), `httpx` is listed in `[project] dependencies` but is o
 
 D-04 specifies adding `ruff` and `ruff-format` as dev dependencies. **`ruff format` is a built-in subcommand of the `ruff` package** — adding `ruff` to dev deps is sufficient to run `ruff format`. There IS a separate `ruff-format` package on PyPI (v0.5.1) but it is a PyO3 binding for programmatic use, not the CLI formatter. Only `ruff` needs to be added to dev deps to satisfy D-04's intent.
 
+**`ruff format` scope in this phase:** The success criteria for TOOL-01 and TOOL-03 is `ruff check` exiting with zero violations. `ruff format --check src/` currently reports files that would be reformatted, but running `ruff format` is NOT part of Phase 1 success criteria. The formatter is installed as a tool (so developers can use it) but enforcing format compliance is out of scope — that would touch additional files beyond the 42 lint violations and constitutes a separate concern.
+
 **Installation:**
 ```bash
 uv add --dev ruff pytest-cov
@@ -152,6 +154,7 @@ ANONYMOUS_RESULT = ResolveResult(name="Anonym", number=ANONYMOUS, source="system
 ### Anti-Patterns to Avoid
 
 - **Adding `ruff-format` as a separate dep:** The PyPI `ruff-format` package is a PyO3 binding, not the CLI. The `ruff format` command ships with the `ruff` package itself.
+- **Running `ruff format` as part of this phase:** TOOL-01/TOOL-03 success criteria is `ruff check` only. `ruff format` would reformat multiple additional files (src/adapters/base.py, mqtt.py, chain.py, etc.) beyond the 42 lint violations — this is a separate formatting pass and out of scope for Phase 1.
 - **Setting `fail-under` in coverage config:** Explicitly deferred (D-09) — do not add `--cov-fail-under` to addopts or `fail_under` to `[tool.coverage.report]`.
 - **Adding `--cov` to addopts permanently without consideration:** With no threshold, it slows every test run slightly. Acceptable for now since the goal is baseline measurement.
 
