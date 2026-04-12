@@ -31,7 +31,11 @@ This roadmap transforms the codebase from working-but-untested into production-r
 3. All v1 dependencies updated to compatible versions with `uv.lock` refreshed
 4. Security audit via `uv audit` completed with all CVEs documented or remediated
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Ruff + pytest-cov tooling: add dev deps, configure pyproject.toml, fix 42 violations
+- [ ] 01-02-PLAN.md — Dependency upgrade + audit: `uv lock --upgrade`, CVE remediation, move httpx to dev
 
 ---
 
@@ -88,7 +92,7 @@ This roadmap transforms the codebase from working-but-untested into production-r
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | — |
+| 1. Foundation | 0/2 | Planned | — |
 | 2. Code Quality | 0/3 | Not started | — |
 | 3. Error Handling & Robustness | 0/3 | Not started | — |
 | 4. Testing & Validation | 0/4 | Not started | — |
@@ -126,3 +130,4 @@ This roadmap transforms the codebase from working-but-untested into production-r
 ---
 
 *Roadmap created: 2026-04-13*
+*Phase 1 planned: 2026-04-13*
