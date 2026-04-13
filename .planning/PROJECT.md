@@ -24,11 +24,14 @@ Der Pipeline-Kern (Normalisierung → Resolver → Output) muss zuverlässig und
 
 ### Active
 
-- [ ] **Dev-Tooling**: Ruff als Dev-Dependency in pyproject.toml, Coverage-Config, Lint-CI-Step
 - [ ] **Fehlerbehandlung**: Silent failures im Resolver-Chain differenzieren (NOT_FOUND vs. NETWORK_ERROR), besseres Error-Logging in Pipeline
 - [ ] **Test-Lücken schließen**: MQTT-Reconnect-Szenarien, API-Routen via TestClient, Call-Aggregation mit fehlenden Events
-- [ ] **Dependencies aufräumen**: Alle Pakete auf aktuelle Versionen prüfen, ungenutzte entfernen, security advisories auflösen
 - [ ] **Code-Qualität**: SQL-Concatenation durch parametrisierte Queries ersetzen, Fritz!Box-Parser defensiver machen
+
+### Validated
+
+- ✓ **Dev-Tooling**: Ruff (>=0.15.10) + pytest-cov (>=7.1.0) als Dev-Dependencies konfiguriert, Coverage-Report in jedem pytest-Lauf — Validated in Phase 01: Foundation
+- ✓ **Dependencies aufräumen**: 11 CVEs behoben (aiohttp→3.13.5, pygments→2.20.0), starlette→1.0.0, httpx aus Production deps entfernt — Validated in Phase 01: Foundation
 
 ### Out of Scope
 
@@ -69,4 +72,4 @@ Dieses Dokument wird an Phasen-Übergängen aktualisiert.
 3. Scope-Erweiterungen abgelehnt? → Out of Scope ergänzen
 
 ---
-*Last updated: 2026-04-13 nach Initialisierung*
+*Last updated: 2026-04-13 — Phase 01: Foundation complete*
