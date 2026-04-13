@@ -7,9 +7,9 @@
 
 ### Dev-Tooling
 
-- [ ] **TOOL-01**: Codebase läuft durch `ruff check` ohne Violations (ruff + ruff-format als dev dependency)
-- [ ] **TOOL-02**: pytest-cov konfiguriert, Coverage-Report mit `uv run pytest --cov=src` generierbar
-- [ ] **TOOL-03**: Ruff-Regeln in pyproject.toml definiert, alle bestehenden Violations gefixt
+- [x] **TOOL-01**: Codebase läuft durch `ruff check` ohne Violations (ruff + ruff-format als dev dependency)
+- [x] **TOOL-02**: pytest-cov konfiguriert, Coverage-Report mit `uv run pytest --cov=src` generierbar
+- [x] **TOOL-03**: Ruff-Regeln in pyproject.toml definiert, alle bestehenden Violations gefixt
 
 ### Fehlerbehandlung
 
@@ -63,9 +63,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TOOL-01 | Phase 1 | Pending |
-| TOOL-02 | Phase 1 | Pending |
-| TOOL-03 | Phase 1 | Pending |
+| TOOL-01 | Phase 1 | Complete |
+| TOOL-02 | Phase 1 | Complete |
+| TOOL-03 | Phase 1 | Complete |
 | ERR-01 | Phase 3 | Pending |
 | ERR-02 | Phase 3 | Pending |
 | ERR-03 | Phase 3 | Pending |
