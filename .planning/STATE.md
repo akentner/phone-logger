@@ -2,20 +2,21 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-04-13T00:13:00.000Z"
+status: verifying
+stopped_at: Completed 01-foundation/01-02-PLAN.md
+last_updated: "2026-04-13T00:16:17.082Z"
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # STATE.md: phone-logger Cleanup & Sanitize
 
 **Milestone:** phone-logger Cleanup & Sanitize  
 **Created:** 2026-04-13  
-**Status:** Executing Phase 01
+**Status:** Phase complete — ready for verification
 
 ## Project Reference
 
@@ -27,23 +28,23 @@ progress:
 
 ## Current Position
 
-Phase: 01 (foundation) — EXECUTING  
-Plan: 2 of 2 (Plan 01 complete)  
-**Stopped at:** Completed 01-foundation/01-01-PLAN.md  
-**Status:** Plan 01 complete — dev tooling baseline established
+Phase: 01 (foundation) — COMPLETE  
+Plan: 2 of 2 (all plans complete)  
+**Stopped at:** Completed 01-foundation/01-02-PLAN.md
+**Status:** Phase 01 complete — dev tooling + dependency hygiene established
 
 **Progress Bar:**
 
 ```
 [Foundation    ] [Code Quality ] [Error Handling] [Testing      ]
-[1/2 plans    ] [0/3 plans    ] [0/3 plans     ] [0/4 plans    ]
+[2/2 plans ✓  ] [0/3 plans    ] [0/3 plans     ] [0/4 plans    ]
 ```
 
 ## Phase Overview
 
 | Phase | Goal | Status | Plans |
 |-------|------|--------|-------|
-| 1 | Foundation: Ruff, Coverage, Audit, Dependencies | In Progress | 1/2 |
+| 1 | Foundation: Ruff, Coverage, Audit, Dependencies | **Complete** | 2/2 ✓ |
 | 2 | Code Quality: SQL Safety, MQTT, Dead Code | Not Started | 0/3 |
 | 3 | Error Handling: Resolver, Parser, MQTT Logging | Not Started | 0/3 |
 | 4 | Testing: API Routes, MQTT, Aggregation, Parser | Not Started | 0/4 |
@@ -66,12 +67,14 @@ Plan: 2 of 2 (Plan 01 complete)
 
 1. ~~**Ruff not in pyproject.toml**~~ — **RESOLVED (01-01):** Ruff added as dev dep, zero violations
 2. ~~**No Coverage Config**~~ — **RESOLVED (01-01):** pytest-cov with term-missing configured
-3. **Exception Swallowing** — Resolver-Chain doesn't differentiate error types
-4. **SQL Concatenation** — f-strings in `src/db/database.py` risk injection
-5. **Fritz!Box Parser** — No field count validation before split()
-6. **MQTT Reconnect** — Limited logging on disconnect/reconnect events
-7. **Uncommitted MQTT Changes** — `src/adapters/mqtt.py` has dirty working tree
-8. **Test Gaps** — No API TestClient tests, MQTT reconnect, aggregation edge cases
+3. ~~**11 CVEs (aiohttp, pygments)**~~ — **RESOLVED (01-02):** aiohttp→3.13.5, pygments→2.20.0; `uv audit` clean
+4. ~~**httpx in production deps**~~ — **RESOLVED (01-02):** moved to dev group, out of Docker image
+5. **Exception Swallowing** — Resolver-Chain doesn't differentiate error types
+6. **SQL Concatenation** — f-strings in `src/db/database.py` risk injection
+7. **Fritz!Box Parser** — No field count validation before split()
+8. **MQTT Reconnect** — Limited logging on disconnect/reconnect events
+9. **Uncommitted MQTT Changes** — `src/adapters/mqtt.py` has dirty working tree
+10. **Test Gaps** — No API TestClient tests, MQTT reconnect, aggregation edge cases
 
 ### Constraints
 
@@ -91,19 +94,22 @@ Plan: 2 of 2 (Plan 01 complete)
 | Ruff E/F/W at 120-char | Per D-01/D-02; ruff-format not a separate install per D-04 | Applied (01-01) |
 | addopts set same commit as pytest-cov install | Prevents startup failure if venv lacks pytest-cov | Applied (01-01) |
 | E402 fixed by moving ANONYMOUS constants | Pure reorder in pipeline.py, no semantic change | Applied (01-01) |
+| starlette 1.0.0 adopted without pin | Zero test regressions in all 201 tests | Applied (01-02) |
+| httpx moved to dev group | Only used by TestClient in tests/; removes 3 packages from Docker image | Applied (01-02) |
+| No SECURITY.md needed | All 11 CVEs resolved by version upgrades alone | Applied (01-02) |
 
 ### Performance Metrics
 
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | 01-foundation | 01 | 2 min | 2 | 10 |
+| 01-foundation | 02 | 4 min | 2 | 2 |
 
 ## Next Steps
 
-1. **Phase 1 Plan 02:** Execute remaining foundation plan (dependency audit / version updates)
-2. **Phase 2 Planning:** Decompose 3 requirements into SQL refactoring, MQTT review, dead code scan
-3. **Phase 3 Planning:** Decompose 3 requirements into error enum, parser validation, MQTT logging
-4. **Phase 4 Planning:** Decompose 4 requirements into API tests, MQTT scenarios, aggregation cases, parser cases
+1. **Phase 2 Planning:** Decompose 3 requirements into SQL refactoring, MQTT review, dead code scan
+2. **Phase 3 Planning:** Decompose 3 requirements into error enum, parser validation, MQTT logging
+3. **Phase 4 Planning:** Decompose 4 requirements into API tests, MQTT scenarios, aggregation cases, parser cases
 
 ## Session Continuity
 
@@ -116,5 +122,4 @@ This state persists across sessions. Update after each phase completion with:
 
 ---
 
-*Last updated: 2026-04-13 after 01-01-PLAN.md completion*
-
+*Last updated: 2026-04-13 after 01-02-PLAN.md completion — Phase 01 foundation complete*

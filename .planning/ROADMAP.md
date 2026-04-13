@@ -11,7 +11,7 @@ This roadmap transforms the codebase from working-but-untested into production-r
 
 ## Phases
 
-- [ ] **Phase 1: Foundation** - Ruff, Coverage, Audit, Dependency Updates
+- [x] **Phase 1: Foundation** - Ruff, Coverage, Audit, Dependency Updates (completed 2026-04-13)
 - [ ] **Phase 2: Code Quality** - SQL Safety, MQTT Cleanup, Dead Code Removal
 - [ ] **Phase 3: Error Handling & Robustness** - Resolver Errors, Parser Validation, MQTT Logging
 - [ ] **Phase 4: Testing & Validation** - API Routes, MQTT Scenarios, Edge Cases
@@ -35,7 +35,7 @@ This roadmap transforms the codebase from working-but-untested into production-r
 
 Plans:
 - [x] 01-01-PLAN.md — Ruff + pytest-cov tooling: add dev deps, configure pyproject.toml, fix 42 violations
-- [ ] 01-02-PLAN.md — Dependency upgrade + audit: `uv lock --upgrade`, CVE remediation, move httpx to dev
+- [x] 01-02-PLAN.md — Dependency upgrade + audit: `uv lock --upgrade`, CVE remediation, move httpx to dev
 
 ---
 
@@ -92,7 +92,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 1/2 | In Progress|  |
+| 1. Foundation | 2/2 | Complete   | 2026-04-13 |
 | 2. Code Quality | 0/3 | Not started | — |
 | 3. Error Handling & Robustness | 0/3 | Not started | — |
 | 4. Testing & Validation | 0/4 | Not started | — |

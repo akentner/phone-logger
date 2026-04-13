@@ -26,9 +26,9 @@
 
 ### Dependencies
 
-- [ ] **DEP-01**: Alle Pakete auf aktuelle kompatible Versionen aktualisiert, uv.lock refreshed
-- [ ] **DEP-02**: Security-Check via `uv audit` durchgeführt, bekannte CVEs adressiert oder dokumentiert
-- [ ] **DEP-03**: Ungenutzte Dependencies identifiziert und aus pyproject.toml entfernt
+- [x] **DEP-01**: Alle Pakete auf aktuelle kompatible Versionen aktualisiert, uv.lock refreshed
+- [x] **DEP-02**: Security-Check via `uv audit` durchgeführt, bekannte CVEs adressiert oder dokumentiert
+- [x] **DEP-03**: Ungenutzte Dependencies identifiziert und aus pyproject.toml entfernt
 
 ### Code-Qualität
 
@@ -73,9 +73,9 @@
 | TEST-02 | Phase 4 | Pending |
 | TEST-03 | Phase 4 | Pending |
 | TEST-04 | Phase 4 | Pending |
-| DEP-01 | Phase 1 | Pending |
-| DEP-02 | Phase 1 | Pending |
-| DEP-03 | Phase 1 | Pending |
+| DEP-01 | Phase 1 | Complete |
+| DEP-02 | Phase 1 | Complete |
+| DEP-03 | Phase 1 | Complete |
 | CODE-01 | Phase 2 | Pending |
 | CODE-02 | Phase 2 | Pending |
 | CODE-03 | Phase 2 | Pending |
