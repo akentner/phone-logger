@@ -8,7 +8,6 @@ from typing import Optional
 
 import aiosqlite
 
-from src.core.utils import uuid7
 
 logger = logging.getLogger(__name__)
 

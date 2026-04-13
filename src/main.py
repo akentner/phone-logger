@@ -1,6 +1,5 @@
 """Main entry point for the phone-logger application."""
 
-import asyncio
 import logging
 import os
 import sys

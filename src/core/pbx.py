@@ -7,7 +7,7 @@ from enum import Enum
 from collections.abc import Awaitable, Callable
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from src.config import DeviceConfig, PbxConfig, PhoneConfig
 from src.core import phone_number as pn

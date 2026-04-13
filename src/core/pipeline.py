@@ -5,19 +5,15 @@ from typing import Optional
 
 from src.adapters.base import BaseInputAdapter, BaseOutputAdapter
 from src.adapters.resolver.chain import ResolverChain
-from src.config import AdapterConfig, AppConfig
+from src.config import AppConfig
 from src.core import phone_number as pn
 from src.core.event import (
     CallDirection,
     CallEvent,
     CallEventType,
-    PipelineResult,
     ResolveResult,
 )
 from src.core.pbx import LineState, PbxStateManager
-
-ANONYMOUS = "anonymous"
-ANONYMOUS_RESULT = ResolveResult(name="Anonym", number=ANONYMOUS, source="system")
 from src.db.database import Database
 
 # Import all adapter implementations
@@ -33,6 +29,9 @@ from src.adapters.resolver.msn import MsnResolver
 from src.adapters.output.call_log import CallLogOutputAdapter
 from src.adapters.output.webhook import WebhookOutputAdapter
 
+ANONYMOUS = "anonymous"
+ANONYMOUS_RESULT = ResolveResult(name="Anonym", number=ANONYMOUS, source="system")
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,16 +46,12 @@ class Pipeline:
         self.config = config
         self.db = db
         self.resolver_chain = ResolverChain()
-        self.pbx = PbxStateManager(
-            config.pbx, config.phone, on_state_change=self._on_line_idle
-        )
+        self.pbx = PbxStateManager(config.pbx, config.phone, on_state_change=self._on_line_idle)
         self._input_adapters: list[BaseInputAdapter] = []
         self._output_adapters: list[BaseOutputAdapter] = []
         self._rest_input: Optional[RestInputAdapter] = None
         self._mqtt_adapters: dict[str, MqttAdapter] = {}
-        self._resolve_cache: dict[
-            int, ResolveResult
-        ] = {}  # Cache per line_id for CONNECT/DISCONNECT
+        self._resolve_cache: dict[int, ResolveResult] = {}  # Cache per line_id for CONNECT/DISCONNECT
 
     @property
     def rest_input(self) -> Optional[RestInputAdapter]:
@@ -218,11 +213,7 @@ class Pipeline:
 
         # 4. Enrich event from LineState (for CONNECT/DISCONNECT which lack call details)
         if event.event_type in (CallEventType.CONNECT, CallEventType.DISCONNECT):
-            line_state = (
-                self.pbx.get_line_state(event.line_id)
-                if event.line_id is not None
-                else None
-            )
+            line_state = self.pbx.get_line_state(event.line_id) if event.line_id is not None else None
             if line_state:
                 updates = {}
                 # Fill missing number field
@@ -296,9 +287,7 @@ class Pipeline:
         This fires ~1s after a terminal state (finished/missed/notReached)
         so that webhook/MQTT subscribers learn the line is free again.
         """
-        logger.debug(
-            "Line %d idle notification → dispatching to output adapters", line_id
-        )
+        logger.debug("Line %d idle notification → dispatching to output adapters", line_id)
         for adapter in self._output_adapters:
             try:
                 await adapter.handle_line_state_change(idle_state)
@@ -331,13 +320,9 @@ class Pipeline:
     def _setup_resolver_adapters(self) -> None:
         """Create and register resolver adapters."""
         resolver_factories = {
-            "json_file": lambda cfg: JsonFileResolver(
-                cfg, self.config.contacts_json_path
-            ),
+            "json_file": lambda cfg: JsonFileResolver(cfg, self.config.contacts_json_path),
             "sqlite": lambda cfg: SqliteResolver(cfg, self.db),
-            "msn": lambda cfg: MsnResolver(
-                cfg, self.config.pbx.msns, self.config.phone
-            ),
+            "msn": lambda cfg: MsnResolver(cfg, self.config.pbx.msns, self.config.phone),
             "tellows": lambda cfg: TellowsResolver(cfg, self.db),
             "dastelefon": lambda cfg: DasTelefonbuchResolver(cfg, self.db),
             "klartelbuch": lambda cfg: KlarTelefonbuchResolver(cfg, self.db),
@@ -345,9 +330,7 @@ class Pipeline:
 
         for adapter_config in self.config.resolver_adapters:
             if not adapter_config.enabled:
-                logger.debug(
-                    "Resolver adapter '%s' disabled, skipping", adapter_config.name
-                )
+                logger.debug("Resolver adapter '%s' disabled, skipping", adapter_config.name)
                 continue
 
             factory = resolver_factories.get(adapter_config.name)
@@ -361,9 +344,7 @@ class Pipeline:
         """Create input adapters."""
         for adapter_config in self.config.input_adapters:
             if not adapter_config.enabled:
-                logger.debug(
-                    "Input adapter '%s' disabled, skipping", adapter_config.name
-                )
+                logger.debug("Input adapter '%s' disabled, skipping", adapter_config.name)
                 continue
 
             if adapter_config.name == "fritz_callmonitor":
@@ -404,9 +385,7 @@ class Pipeline:
 
             if adapter_type == "call_log":
                 if call_log_registered:
-                    logger.warning(
-                        "Multiple call_log adapters configured — only first instance used"
-                    )
+                    logger.warning("Multiple call_log adapters configured — only first instance used")
                     continue
                 adapter = CallLogOutputAdapter(adapter_config, self.db)
                 call_log_registered = True

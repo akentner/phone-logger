@@ -181,19 +181,19 @@ TRANSLATIONS: dict[str, dict[str, Any]] = {
 def get_translation(key: str, lang: str = DEFAULT_LANGUAGE) -> str | dict:
     """
     Get a translation for a key.
-    
+
     Args:
         key: Dot-separated key path, e.g. "number_type.private" or "ui.save"
         lang: Language code (de, en)
-    
+
     Returns:
         Translated string or dict if key points to a group
     """
     if lang not in SUPPORTED_LANGUAGES:
         lang = DEFAULT_LANGUAGE
-    
+
     translations = TRANSLATIONS.get(lang, TRANSLATIONS[DEFAULT_LANGUAGE])
-    
+
     parts = key.split(".")
     result: Any = translations
     for part in parts:
@@ -201,21 +201,21 @@ def get_translation(key: str, lang: str = DEFAULT_LANGUAGE) -> str | dict:
             result = result[part]
         else:
             return key  # Return key as fallback
-    
+
     return result
 
 
 def get_translations(lang: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
     """
     Get all translations for a language.
-    
+
     Args:
         lang: Language code (de, en)
-    
+
     Returns:
         Full translation dictionary for the language
     """
     if lang not in SUPPORTED_LANGUAGES:
         lang = DEFAULT_LANGUAGE
-    
+
     return TRANSLATIONS.get(lang, TRANSLATIONS[DEFAULT_LANGUAGE])

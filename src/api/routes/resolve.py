@@ -5,7 +5,6 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from src.api.models import ResolveResponse
-from src.core.event import CallDirection, CallEvent, CallEventType
 
 logger = logging.getLogger(__name__)
 

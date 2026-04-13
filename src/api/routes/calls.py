@@ -5,7 +5,6 @@ import logging
 from fastapi import APIRouter, Query
 
 from src.api.models import (
-    CallEntry,
     CallListResponse,
     CallLogResponse,
     DeviceInfoResponse,
