@@ -19,7 +19,7 @@ Not in scope: fixing logic errors, adding tests, improving error handling (those
 - **D-01:** Rule categories: `E`, `F`, `W` only (pyflakes + pycodestyle basics) — minimal ruleset to avoid scope creep
 - **D-02:** Line length: 120 characters — consistent with monorepo CLAUDE.md standard
 - **D-03:** All existing violations must be fixed so `ruff check` passes with zero violations
-- **D-04:** `ruff` and `ruff-format` added to `[dependency-groups] dev` in `pyproject.toml`
+- **D-04:** `ruff` added to `[dependency-groups] dev` in `pyproject.toml` — `ruff format` ships as a built-in subcommand of `ruff`; the separate `ruff-format` PyPI package is a PyO3 binding unrelated to the CLI formatter and must NOT be installed
 - **D-05:** Ruff config lives in `[tool.ruff]` section of `pyproject.toml` (no separate `.ruff.toml`)
 
 ### Coverage measurement
