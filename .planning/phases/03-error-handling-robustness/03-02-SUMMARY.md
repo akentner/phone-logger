@@ -116,3 +116,11 @@ None - no external service configuration required.
 ---
 *Phase: 03-error-handling-robustness*
 *Completed: 2026-04-14*
+
+## Self-Check: PASSED
+
+- FOUND: src/adapters/input/fritz_callmonitor.py
+- FOUND: tests/test_fritz_parser.py
+- FOUND: .planning/phases/03-error-handling-robustness/03-02-SUMMARY.md
+- FOUND: 297ad07 test(03-02): add failing TestFritzParserMinFields tests
+- FOUND: 44b4768 feat(03-02): add MIN_FIELDS validation to Fritz parser

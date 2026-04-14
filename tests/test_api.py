@@ -83,7 +83,6 @@ async def test_get_calls_returns_200_with_call_list_response():
     - response has items, next_cursor, limit fields
     - items contain expected call data
     """
-    # Create temp database for this test
     tmpdir = tempfile.mkdtemp()
     db_path = str(Path(tmpdir) / "test.db")
     db = Database(db_path)
@@ -145,7 +144,7 @@ async def test_get_calls_returns_200_with_call_list_response():
         mock_pipeline.pbx = mock_pbx
         mock_pipeline.normalize = lambda x: x
 
-        # Override dependencies - import the actual functions and override them
+        # Override dependencies
         from src.main import get_db as real_get_db, get_pipeline as real_get_pipeline
 
         def get_test_db():
@@ -159,13 +158,18 @@ async def test_get_calls_returns_200_with_call_list_response():
             real_get_pipeline: get_test_pipeline,
         }
 
-        # Create test client
-        transport = ASGITransport(app=app)
-        async with AsyncClient(
-            base_url="http://test", transport=transport
-        ) as client:
-            # GET /api/calls
-            response = await client.get("/api/calls")
+        # Set global _db for routes that call get_db() directly
+        import src.main
+        old_db = src.main._db
+        src.main._db = db
+
+        try:
+            # Create test client
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                base_url="http://test", transport=transport
+            ) as client:
+                response = await client.get("/api/calls")
 
             # Verify response
             assert response.status_code == 200
@@ -177,15 +181,24 @@ async def test_get_calls_returns_200_with_call_list_response():
             assert data["limit"] == 50
             assert data["next_cursor"] is None
 
-            # Verify call fields
-            call1 = data["items"][0]
-            assert call1["connection_id"] == 1
-            assert call1["caller_number"] == "+496181123456"
-            assert call1["called_number"] == "+496181654321"
-            assert call1["direction"] == "inbound"
-            assert call1["status"] == "answered"
-            assert "id" in call1
-            assert "created_at" in call1
+            # Verify call fields - check that both calls are present
+            conn_ids = {call["connection_id"] for call in data["items"]}
+            assert 1 in conn_ids and 2 in conn_ids
+            for call in data["items"]:
+                if call["connection_id"] == 1:
+                    assert call["caller_number"] == "+496181123456"
+                    assert call["called_number"] == "+496181654321"
+                    assert call["direction"] == "inbound"
+                elif call["connection_id"] == 2:
+                    assert call["caller_number"] == "+496181654321"
+                    assert call["called_number"] == "+496181123456"
+                    assert call["direction"] == "outbound"
+                assert call["status"] == "answered"
+                assert "id" in call
+                assert "created_at" in call
+        finally:
+            # Restore global _db
+            src.main._db = old_db
 
     finally:
         await db.close()
@@ -325,36 +338,45 @@ async def test_post_contacts_creates_contact_returns_201():
             real_get_pipeline: get_test_pipeline,
         }
 
-        # Create test client
-        transport = ASGITransport(app=app)
-        async with AsyncClient(
-            base_url="http://test", transport=transport
-        ) as client:
-            payload = ContactCreate(
-                number="+491234567890",
-                name="Alice Smith",
-                number_type=NumberType.PRIVATE,
-                tags=["Familie"],
-            )
+        # Set global _db for routes that call get_db() directly
+        import src.main
+        old_db = src.main._db
+        src.main._db = db
 
-            response = await client.post(
-                "/api/contacts", json=payload.model_dump()
-            )
+        try:
+            # Create test client
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                base_url="http://test", transport=transport
+            ) as client:
+                payload = ContactCreate(
+                    number="+491234567890",
+                    name="Alice Smith",
+                    number_type=NumberType.PRIVATE,
+                    tags=["Familie"],
+                )
 
-            assert response.status_code == 201
-            data = response.json()
+                response = await client.post(
+                    "/api/contacts", json=payload.model_dump()
+                )
 
-            # Verify response fields
-            assert data["number"] == "+491234567890"
-            assert data["name"] == "Alice Smith"
-            assert data["number_type"] == "private"
-            assert data["tags"] == ["Familie"]
+                assert response.status_code == 201
+                data = response.json()
 
-            # Verify contact was stored
-            stored = await db.get_contact("+491234567890")
-            assert stored is not None
-            assert stored["name"] == "Alice Smith"
-            assert stored["number_type"] == "private"
+                # Verify response fields
+                assert data["number"] == "+491234567890"
+                assert data["name"] == "Alice Smith"
+                assert data["number_type"] == "private"
+                assert data["tags"] == ["Familie"]
+
+                # Verify contact was stored
+                stored = await db.get_contact("+491234567890")
+                assert stored is not None
+                assert stored["name"] == "Alice Smith"
+                assert stored["number_type"] == "private"
+        finally:
+            # Restore global _db
+            src.main._db = old_db
 
     finally:
         await db.close()
