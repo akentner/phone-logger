@@ -51,7 +51,11 @@ Plans:
 2. Uncommitted changes in `src/adapters/mqtt.py` reviewed, cleaned, and committed with clear message
 3. Codebase has no unused imports, unreachable code branches, or dead variables (verified by Ruff)
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — SQL f-string refactor: replace structural assembly in database.py with string concatenation
+- [ ] 02-02-PLAN.md — MQTT bug fix commit + Ruff dead-code verification
 
 ---
 
@@ -93,7 +97,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete   | 2026-04-13 |
-| 2. Code Quality | 0/3 | Not started | — |
+| 2. Code Quality | 0/2 | Not started | — |
 | 3. Error Handling & Robustness | 0/3 | Not started | — |
 | 4. Testing & Validation | 0/4 | Not started | — |
 
@@ -131,3 +135,4 @@ Plans:
 
 *Roadmap created: 2026-04-13*
 *Phase 1 planned: 2026-04-13*
+*Phase 2 planned: 2026-04-14*
