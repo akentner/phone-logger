@@ -26,12 +26,13 @@ Der Pipeline-Kern (Normalisierung → Resolver → Output) muss zuverlässig und
 
 - [ ] **Fehlerbehandlung**: Silent failures im Resolver-Chain differenzieren (NOT_FOUND vs. NETWORK_ERROR), besseres Error-Logging in Pipeline
 - [ ] **Test-Lücken schließen**: MQTT-Reconnect-Szenarien, API-Routen via TestClient, Call-Aggregation mit fehlenden Events
-- [ ] **Code-Qualität**: SQL-Concatenation durch parametrisierte Queries ersetzen, Fritz!Box-Parser defensiver machen
+- [ ] **Code-Qualität**: Fritz!Box-Parser defensiver machen (SQL-Concatenation bereits behoben)
 
 ### Validated
 
 - ✓ **Dev-Tooling**: Ruff (>=0.15.10) + pytest-cov (>=7.1.0) als Dev-Dependencies konfiguriert, Coverage-Report in jedem pytest-Lauf — Validated in Phase 01: Foundation
 - ✓ **Dependencies aufräumen**: 11 CVEs behoben (aiohttp→3.13.5, pygments→2.20.0), starlette→1.0.0, httpx aus Production deps entfernt — Validated in Phase 01: Foundation
+- ✓ **Code-Qualität**: SQL f-string-Concatenation in `database.py` durch sichere Patterns ersetzt, MQTT display-name Bug committed, Ruff: 0 Violations — Validated in Phase 02: Code Quality
 
 ### Out of Scope
 
@@ -72,4 +73,4 @@ Dieses Dokument wird an Phasen-Übergängen aktualisiert.
 3. Scope-Erweiterungen abgelehnt? → Out of Scope ergänzen
 
 ---
-*Last updated: 2026-04-13 — Phase 01: Foundation complete*
+*Last updated: 2026-04-14 — Phase 02: Code Quality complete*
