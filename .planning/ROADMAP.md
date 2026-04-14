@@ -74,7 +74,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Resolver error hierarchy: create errors.py, refactor chain.py, add typed raises to 4 resolvers
+- [x] 03-01-PLAN.md — Resolver error hierarchy: create errors.py, refactor chain.py, add typed raises to 4 resolvers
 - [ ] 03-02-PLAN.md — Fritz parser validation: MIN_FIELDS constant + guard in _parse_line(), unknown event debug log
 - [ ] 03-03-PLAN.md — MQTT reconnect logging: _reconnect_attempts counter + 4 log events in _run_loop/_connect
 
@@ -103,7 +103,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete   | 2026-04-13 |
 | 2. Code Quality | 0/2 | Planned    |  |
-| 3. Error Handling & Robustness | 0/3 | Planned | — |
+| 3. Error Handling & Robustness | 1/3 | In Progress|  |
 | 4. Testing & Validation | 0/4 | Not started | — |
 
 ---
