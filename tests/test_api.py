@@ -12,7 +12,6 @@ from src.api.models import ContactCreate, NumberType
 from src.core.event import ResolveResult
 from src.core.utils import uuid7
 from src.db.database import Database
-from src.main import get_db, get_pipeline
 from src.core.pipeline import Pipeline
 from unittest.mock import MagicMock
 from src.core.pbx import PbxStateManager
@@ -146,9 +145,19 @@ async def test_get_calls_returns_200_with_call_list_response():
         mock_pipeline.pbx = mock_pbx
         mock_pipeline.normalize = lambda x: x
 
-        # Override dependencies
-        app.dependency_overrides[get_db] = lambda: db
-        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        # Override dependencies - import the actual functions and override them
+        from src.main import get_db as real_get_db, get_pipeline as real_get_pipeline
+
+        def get_test_db():
+            return db
+
+        def get_test_pipeline():
+            return mock_pipeline
+
+        app.dependency_overrides = {
+            real_get_db: get_test_db,
+            real_get_pipeline: get_test_pipeline,
+        }
 
         # Create test client
         transport = ASGITransport(app=app)
@@ -223,8 +232,18 @@ async def test_get_pbx_status_returns_200_with_full_status():
         mock_pipeline.normalize = lambda x: x
 
         # Override dependencies
-        app.dependency_overrides[get_db] = lambda: db
-        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        from src.main import get_db as real_get_db, get_pipeline as real_get_pipeline
+
+        def get_test_db():
+            return db
+
+        def get_test_pipeline():
+            return mock_pipeline
+
+        app.dependency_overrides = {
+            real_get_db: get_test_db,
+            real_get_pipeline: get_test_pipeline,
+        }
 
         # Create test client
         transport = ASGITransport(app=app)
@@ -293,8 +312,18 @@ async def test_post_contacts_creates_contact_returns_201():
         mock_pipeline.normalize = lambda x: x
 
         # Override dependencies
-        app.dependency_overrides[get_db] = lambda: db
-        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        from src.main import get_db as real_get_db, get_pipeline as real_get_pipeline
+
+        def get_test_db():
+            return db
+
+        def get_test_pipeline():
+            return mock_pipeline
+
+        app.dependency_overrides = {
+            real_get_db: get_test_db,
+            real_get_pipeline: get_test_pipeline,
+        }
 
         # Create test client
         transport = ASGITransport(app=app)
@@ -372,8 +401,18 @@ async def test_post_contacts_duplicate_returns_409():
         mock_pipeline.normalize = lambda x: x
 
         # Override dependencies
-        app.dependency_overrides[get_db] = lambda: db
-        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        from src.main import get_db as real_get_db, get_pipeline as real_get_pipeline
+
+        def get_test_db():
+            return db
+
+        def get_test_pipeline():
+            return mock_pipeline
+
+        app.dependency_overrides = {
+            real_get_db: get_test_db,
+            real_get_pipeline: get_test_pipeline,
+        }
 
         # Create test client
         transport = ASGITransport(app=app)
