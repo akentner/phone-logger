@@ -24,15 +24,14 @@ Der Pipeline-Kern (Normalisierung → Resolver → Output) muss zuverlässig und
 
 ### Active
 
-- [ ] **Fehlerbehandlung**: Silent failures im Resolver-Chain differenzieren (NOT_FOUND vs. NETWORK_ERROR), besseres Error-Logging in Pipeline
 - [ ] **Test-Lücken schließen**: MQTT-Reconnect-Szenarien, API-Routen via TestClient, Call-Aggregation mit fehlenden Events
-- [ ] **Code-Qualität**: Fritz!Box-Parser defensiver machen (SQL-Concatenation bereits behoben)
 
 ### Validated
 
 - ✓ **Dev-Tooling**: Ruff (>=0.15.10) + pytest-cov (>=7.1.0) als Dev-Dependencies konfiguriert, Coverage-Report in jedem pytest-Lauf — Validated in Phase 01: Foundation
 - ✓ **Dependencies aufräumen**: 11 CVEs behoben (aiohttp→3.13.5, pygments→2.20.0), starlette→1.0.0, httpx aus Production deps entfernt — Validated in Phase 01: Foundation
 - ✓ **Code-Qualität**: SQL f-string-Concatenation in `database.py` durch sichere Patterns ersetzt, MQTT display-name Bug committed, Ruff: 0 Violations — Validated in Phase 02: Code Quality
+- ✓ **Fehlerbehandlung**: Typed exception hierarchy (NetworkError, RateLimitError, ResolverError) in Resolver-Chain; Fritz!Box-Parser mit MIN_FIELDS-Validierung; MQTT reconnect counter + 4 strukturierte Log-Events — Validated in Phase 03: Error Handling & Robustness
 
 ### Out of Scope
 
@@ -43,7 +42,7 @@ Der Pipeline-Kern (Normalisierung → Resolver → Output) muss zuverlässig und
 
 ## Context
 
-- **Codebase-Status**: 201 Tests, alle grün. Ruff ist laut CLAUDE.md der Linter, aber nicht in pyproject.toml als Dev-Dependency. Keine Coverage-Konfiguration.
+- **Codebase-Status**: 219 Tests, alle grün. Ruff konfiguriert, Coverage aktiv.
 - **Bekannte Schwachstellen** (aus Codebase-Scan): Resolver-Chain swallowed exceptions, MQTT-Reconnect-Lücken, Fritz!Box-Parser ohne Feldanzahl-Validierung, f-string SQL-Concatenation in database.py
 - **Test-Coverage-Lücken**: API-Routen (TestClient fehlt), MQTT-Reconnect, Call-Aggregation Edge-Cases, Web-Scraper-Parser-Fehler
 - **Geänderte Datei**: `src/adapters/mqtt.py` hat uncommitted changes — Cleanup muss berücksichtigen was dort läuft
@@ -73,4 +72,4 @@ Dieses Dokument wird an Phasen-Übergängen aktualisiert.
 3. Scope-Erweiterungen abgelehnt? → Out of Scope ergänzen
 
 ---
-*Last updated: 2026-04-14 — Phase 02: Code Quality complete*
+*Last updated: 2026-04-14 — Phase 03: Error Handling & Robustness complete*
