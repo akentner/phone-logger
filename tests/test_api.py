@@ -436,31 +436,40 @@ async def test_post_contacts_duplicate_returns_409():
             real_get_pipeline: get_test_pipeline,
         }
 
-        # Create test client
-        transport = ASGITransport(app=app)
-        async with AsyncClient(
-            base_url="http://test", transport=transport
-        ) as client:
-            payload = ContactCreate(
-                number="+491234567890",
-                name="Bob Jones",
-                number_type=NumberType.BUSINESS,
-                tags=["Arbeit"],
-            )
+        # Set global _db for routes that call get_db() directly
+        import src.main
+        old_db = src.main._db
+        src.main._db = db
 
-            # First POST should succeed
-            response1 = await client.post(
-                "/api/contacts", json=payload.model_dump()
-            )
-            assert response1.status_code == 201
+        try:
+            # Create test client
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                base_url="http://test", transport=transport
+            ) as client:
+                payload = ContactCreate(
+                    number="+491234567890",
+                    name="Bob Jones",
+                    number_type=NumberType.BUSINESS,
+                    tags=["Arbeit"],
+                )
 
-            # Second POST with same number should fail
-            response2 = await client.post(
-                "/api/contacts", json=payload.model_dump()
-            )
-            assert response2.status_code == 409
-            error = response2.json()
-            assert "already exists" in error.get("detail", "")
+                # First POST should succeed
+                response1 = await client.post(
+                    "/api/contacts", json=payload.model_dump()
+                )
+                assert response1.status_code == 201
+
+                # Second POST with same number should fail
+                response2 = await client.post(
+                    "/api/contacts", json=payload.model_dump()
+                )
+                assert response2.status_code == 409
+                error = response2.json()
+                assert "already exists" in error.get("detail", "")
+        finally:
+            # Restore global _db
+            src.main._db = old_db
 
     finally:
         await db.close()
