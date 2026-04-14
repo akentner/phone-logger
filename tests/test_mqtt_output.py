@@ -1,6 +1,7 @@
 """Tests for MqttAdapter — persistent connection, Birth/LWT,
 line/trunk state topics and HA Auto Discovery."""
 
+import asyncio
 import json
 import logging
 import sys
@@ -945,3 +946,142 @@ class TestMqttReconnectLogging:
             if "disconnected" in r.message.lower() and r.levelno == logging.WARNING
         ]
         assert len(disconnected_records) >= 1
+
+
+# ---------------------------------------------------------------------------
+# MQTT Publish While Offline (TEST-02)
+# ---------------------------------------------------------------------------
+
+
+class TestMqttPublishOffline:
+    """Tests for MQTT offline scenarios: verify graceful handling when broker
+    is unavailable. This addresses TEST-02 requirement."""
+
+    @pytest.mark.asyncio
+    async def test_handle_returns_without_error_when_client_none(self):
+        """handle() should return cleanly when _client is None (offline)."""
+        adapter = _make_adapter()
+        # Default state: _client is None
+        assert adapter._client is None
+
+        # Should not raise
+        await adapter.handle(_make_event(), None)
+
+    @pytest.mark.asyncio
+    async def test_handle_logs_debug_when_client_offline(self, caplog):
+        """handle() should log debug message when offline, not error."""
+        adapter = _make_adapter()
+        adapter._client = None
+
+        with caplog.at_level(logging.DEBUG):
+            await adapter.handle(_make_event(), None)
+
+        # Should have a debug log about dropping the event
+        debug_records = [
+            r for r in caplog.records
+            if "not connected" in r.message.lower() and r.levelno == logging.DEBUG
+        ]
+        assert len(debug_records) >= 1
+
+    @pytest.mark.asyncio
+    async def test_handle_line_state_change_returns_when_client_none(self):
+        """handle_line_state_change() should return cleanly when _client is None."""
+        adapter = _make_adapter()
+        adapter._client = None
+
+        # Should not raise
+        await adapter.handle_line_state_change(_make_line_state())
+
+    @pytest.mark.asyncio
+    async def test_handle_with_resolved_result_drops_silently(self):
+        """Even with a resolved result, offline should silently drop (no publish)."""
+        adapter = _make_adapter()
+        adapter._client = None
+
+        result = ResolveResult(
+            name="Alice", number="+491234567890", source="sqlite"
+        )
+
+        # Should not raise even with resolved data
+        await adapter.handle(_make_event(), result)
+
+    @pytest.mark.asyncio
+    async def test_multiple_rapid_calls_while_offline_no_deadlock(self):
+        """Multiple concurrent handle() calls should not deadlock when offline."""
+        adapter = _make_adapter()
+        adapter._client = None
+
+        # 5 concurrent calls — should all complete without deadlock
+        await asyncio.gather(
+            *[adapter.handle(_make_event(number=f"+4912345678{i:02d}"), None)
+              for i in range(5)]
+        )
+
+    @pytest.mark.asyncio
+    async def test_event_dropped_offline_published_online(self):
+        """Verify offline drop → reconnect → online publish behavior."""
+        adapter = _make_adapter()
+        event = _make_event()
+        result = ResolveResult(name="Bob", number="+491234567890", source="test")
+
+        # Step 1: Offline — event is dropped
+        adapter._client = None
+        await adapter.handle(event, result)
+
+        # Step 2: Inject a live client (simulating reconnect)
+        published = _inject_client(adapter)
+
+        # Step 3: Online — event is published
+        await adapter.handle(event, result)
+
+        # Verify: at least one event topic was published
+        event_topics = [p[0] for p in published if p[0] == "phone-logger/event"]
+        assert len(event_topics) >= 1, "Expected event to be published after reconnect"
+
+        # Verify payload contains the resolved name
+        payload = json.loads(
+            next(p[1] for p in published if p[0] == "phone-logger/event")
+        )
+        assert payload["name"] == "Bob"
+        assert payload["resolved"] is True
+
+    @pytest.mark.asyncio
+    async def test_handle_line_state_change_offline_then_online(self):
+        """Line state change should be dropped offline, published online."""
+        adapter = _make_adapter()
+        line_state = _make_line_state()
+
+        # Step 1: Offline — no publish
+        adapter._client = None
+        await adapter.handle_line_state_change(line_state)
+
+        # Step 2: Reconnect with injected client
+        published = _inject_client(adapter)
+
+        # Step 3: Online — publish the state
+        await adapter.handle_line_state_change(line_state)
+
+        # Verify line state topic was published
+        line_topics = [
+            p[0] for p in published if "phone-logger/line" in p[0]
+        ]
+        assert len(line_topics) >= 1, "Expected line state to be published after reconnect"
+
+    @pytest.mark.asyncio
+    async def test_offline_no_logging_of_missing_topics(self, caplog):
+        """When offline, no topics should be published (and no error logs)."""
+        adapter = _make_adapter()
+        adapter._client = None
+        line_state = _make_line_state()
+
+        with caplog.at_level(logging.ERROR):
+            await adapter.handle(_make_event(), None, line_state=line_state)
+            await adapter.handle_line_state_change(line_state)
+
+        # Should have no ERROR logs about failures
+        error_records = [
+            r for r in caplog.records if r.levelno == logging.ERROR
+        ]
+        assert len(error_records) == 0, (
+            "Offline should be silent — no error logs"
+        )
