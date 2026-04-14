@@ -49,8 +49,9 @@ tasks:
       - sed -i 's/version="[^"]*"/version="{{.VERSION}}"/' src/api/app.py
       - uv lock
       - git add pyproject.toml src/api/app.py uv.lock
-      - git commit -m "chore:\ bump version to {{.VERSION}}"
-      - git push origin main
+      - git commit -m "chore: bump version to {{.VERSION}}"
+      - git tag v{{.VERSION}}
+      - git push origin main && git push --tags origin 
       - gh release create v{{.VERSION}} --title "v{{.VERSION}}" --generate-notes
 
   # --- CI / Pipeline Status ---
