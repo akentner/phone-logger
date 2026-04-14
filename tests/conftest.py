@@ -44,18 +44,22 @@ def _make_pbx_mock() -> MagicMock:
     return pbx
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="function")
 async def test_db():
-    """Create a temporary test database."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = str(Path(tmpdir) / "test.db")
-        db = Database(db_path)
-        await db.connect()
+    """Create a temporary test database (function-scoped)."""
+    tmpdir = tempfile.mkdtemp()
+    db_path = str(Path(tmpdir) / "test.db")
+    db = Database(db_path)
+    await db.connect()
+    try:
         yield db
+    finally:
         await db.close()
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="function")
 async def test_app(test_db):
     """Create FastAPI app for testing with mocked dependencies.
 
@@ -102,13 +106,16 @@ async def test_app(test_db):
     app.dependency_overrides.clear()
 
 
-@pytest_asyncio.fixture
-async def test_client(test_app):
+@pytest_asyncio.fixture(scope="function")
+async def test_client(test_app, test_db):
     """Create AsyncClient for testing FastAPI endpoints.
 
     Uses ASGITransport to allow async/await in tests.
+    Depends on both test_app and test_db to ensure they're created before the test.
     """
-    async with AsyncClient(
-        app=test_app, base_url="http://test", transport=ASGITransport(app=test_app)
-    ) as client:
+    transport = ASGITransport(app=test_app)
+    client = AsyncClient(base_url="http://test", transport=transport)
+    try:
         yield client
+    finally:
+        await client.aclose()
