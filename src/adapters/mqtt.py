@@ -382,6 +382,15 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
             )
             return
 
+        # Derive display names from resolve result for the remote party
+        caller_display: Optional[str] = None
+        called_display: Optional[str] = None
+        if line_state is not None and result is not None and result.name:
+            if line_state.direction and line_state.direction.value == "inbound":
+                caller_display = result.name
+            else:
+                called_display = result.name
+
         payload = {
             "number": event.number,
             "caller_number": event.caller_number,
@@ -397,17 +406,8 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
             "spam_score": result.spam_score if result else None,
             "is_spam": result.is_spam if result else False,
             "resolver_source": result.source if result else None,
-            "line_state": _serialize_line_state(line_state),
+            "line_state": _serialize_line_state(line_state, caller_display, called_display),
         }
-
-        # Derive display names from resolve result for the remote party
-        caller_display: Optional[str] = None
-        called_display: Optional[str] = None
-        if line_state is not None and result is not None and result.name:
-            if line_state.direction and line_state.direction.value == "inbound":
-                caller_display = result.name
-            else:
-                called_display = result.name
 
         topic_base = self._topic_prefix
         message = json.dumps(payload)
