@@ -93,7 +93,13 @@ Plans:
 3. Call aggregation edge cases tested: DISCONNECT without RING, CONNECT without DISCONNECT, Orphan calls
 4. Fritz!Box parser edge cases tested: Missing fields, out-of-order events, Duplicate events
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — API routes TestClient tests: GET /api/calls, GET /api/pbx/status, POST /api/contacts
+- [ ] 04-02-PLAN.md — MQTT publish-while-offline scenarios: verify silent drop, no crash on connection loss
+- [ ] 04-03-PLAN.md — Call aggregation edge cases: DISCONNECT without RING, CONNECT without DISCONNECT, orphans
+- [ ] 04-04-PLAN.md — Fritz!Box parser edge cases: idempotency, out-of-order, adapter integration tests
 
 ---
 
@@ -104,7 +110,7 @@ Plans:
 | 1. Foundation | 2/2 | Complete   | 2026-04-13 |
 | 2. Code Quality | 0/2 | Planned    |  |
 | 3. Error Handling & Robustness | 3/3 | Complete   | 2026-04-14 |
-| 4. Testing & Validation | 0/4 | Not started | — |
+| 4. Testing & Validation | 0/4 | Planned    | — |
 
 ---
 
@@ -142,3 +148,4 @@ Plans:
 *Phase 1 planned: 2026-04-13*
 *Phase 2 planned: 2026-04-14*
 *Phase 3 planned: 2026-04-14*
+*Phase 4 planned: 2026-04-15*
