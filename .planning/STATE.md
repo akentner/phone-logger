@@ -4,10 +4,10 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 04-testing-validation/04-01-PLAN.md
-last_updated: "2026-04-15T00:48:35.000Z"
+last_updated: "2026-04-14T22:51:56.846Z"
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
   completed_plans: 11
 ---
@@ -22,22 +22,22 @@ progress:
 
 **Core Value:** Der Pipeline-Kern (Normalisierung → Resolver → Output) muss zuverlässig und klar nachvollziehbar bleiben.
 
-**Current Focus:** Phase 04 — testing-validation
+**Current Focus:** Phase 02 — code-quality (resumed execution)
 
 **Key Constraint:** All 201 existing tests must remain green. No breaking changes to MQTT topics, webhooks, APIs, or config.
 
 ## Current Position
 
-Phase: 04 (testing-validation) — EXECUTING
-Plan: 1 of 4
-**Stopped at:** Completed 04-testing-validation/04-01-PLAN.md
-**Status:** Phase 04 progress — 4/4 plans complete (01: API routes, 02: MQTT offline, 03: call aggregation edge cases, 04: Fritz parser)
+Phase: 02 (code-quality) — EXECUTING
+Plan: 2 of 3
+**Stopped at:** Completed 02-code-quality/02-01-PLAN.md
+**Status:** Phase 02 progress — 1/3 plans complete (01: SQL safety ✓)
 
 **Progress Bar:**
 
 ```
 [Foundation    ] [Code Quality ] [Error Handling] [Testing      ]
-[2/2 plans ✓  ] [0/3 plans    ] [0/3 plans     ] [4/4 plans ✓ ]
+[2/2 plans ✓  ] [1/3 plans    ] [0/3 plans     ] [4/4 plans ✓ ]
 ```
 
 ## Phase Overview
@@ -45,7 +45,7 @@ Plan: 1 of 4
 | Phase | Goal | Status | Plans |
 |-------|------|--------|-------|
 | 1 | Foundation: Ruff, Coverage, Audit, Dependencies | **Complete** | 2/2 ✓ |
-| 2 | Code Quality: SQL Safety, MQTT, Dead Code | Not Started | 0/3 |
+| 2 | Code Quality: SQL Safety, MQTT, Dead Code | In Progress | 1/3 (01 ✓) |
 | 3 | Error Handling: Resolver, Parser, MQTT Logging | Not Started | 0/3 |
 | 4 | Testing: API Routes, MQTT, Aggregation, Parser | **Complete** | 4/4 (01 ✓, 02 ✓, 03 ✓, 04 ✓) |
 
