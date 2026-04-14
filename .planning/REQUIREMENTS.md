@@ -14,7 +14,7 @@
 ### Fehlerbehandlung
 
 - [x] **ERR-01**: Resolver-Chain unterscheidet NOT_FOUND / NETWORK_ERROR / RATE_LIMITED statt Exception swallowing
-- [ ] **ERR-02**: Fritz!Box-Parser validiert Feldanzahl vor dem Split, loggt rohe Nachricht bei Parse-Fehler
+- [x] **ERR-02**: Fritz!Box-Parser validiert Feldanzahl vor dem Split, loggt rohe Nachricht bei Parse-Fehler
 - [x] **ERR-03**: MQTT-Adapter loggt Disconnect/Reconnect-Events mit relevantem Kontext (Grund, Zähler)
 
 ### Tests
@@ -67,7 +67,7 @@
 | TOOL-02 | Phase 1 | Complete |
 | TOOL-03 | Phase 1 | Complete |
 | ERR-01 | Phase 3 | Complete |
-| ERR-02 | Phase 3 | Pending |
+| ERR-02 | Phase 3 | Complete |
 | ERR-03 | Phase 3 | Complete |
 | TEST-01 | Phase 4 | Pending |
 | TEST-02 | Phase 4 | Pending |
