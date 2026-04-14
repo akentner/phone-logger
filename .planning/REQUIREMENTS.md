@@ -22,7 +22,7 @@
 - [ ] **TEST-01**: Mindestens 3 FastAPI-Routen mit echtem TestClient getestet (GET /api/calls, GET /api/pbx/status, POST /api/contacts)
 - [ ] **TEST-02**: MQTT-Reconnect-Szenarien getestet: Broker-Neustart, Publish-while-offline, Connection-Drop
 - [ ] **TEST-03**: Call-Aggregation Edge Cases: DISCONNECT ohne RING, CONNECT ohne DISCONNECT, Orphan-Calls
-- [ ] **TEST-04**: Fritz!Box-Parser Edge Cases: fehlende Felder, out-of-order Events, Duplikate
+- [x] **TEST-04**: Fritz!Box-Parser Edge Cases: fehlende Felder, out-of-order Events, Duplikate
 
 ### Dependencies
 
@@ -72,7 +72,7 @@
 | TEST-01 | Phase 4 | Pending |
 | TEST-02 | Phase 4 | Pending |
 | TEST-03 | Phase 4 | Pending |
-| TEST-04 | Phase 4 | Pending |
+| TEST-04 | Phase 4 | Complete |
 | DEP-01 | Phase 1 | Complete |
 | DEP-02 | Phase 1 | Complete |
 | DEP-03 | Phase 1 | Complete |
