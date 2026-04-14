@@ -332,7 +332,7 @@ class Database:
         where = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
         params.append(limit)
         db_cursor = await self.db.execute(
-            f"SELECT * FROM raw_events{where} ORDER BY id DESC LIMIT ?",
+            "SELECT * FROM raw_events" + where + " ORDER BY id DESC LIMIT ?",
             params,
         )
         rows = await db_cursor.fetchall()
@@ -392,7 +392,7 @@ class Database:
         where = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
         params.append(limit)
         db_cursor = await self.db.execute(
-            f"SELECT * FROM call_log{where} ORDER BY id DESC LIMIT ?",
+            "SELECT * FROM call_log" + where + " ORDER BY id DESC LIMIT ?",
             params,
         )
         rows = await db_cursor.fetchall()
@@ -565,7 +565,7 @@ class Database:
             params.extend([term, term, term, term])
         if msn:
             placeholders = ",".join("?" * len(msn))
-            where_clauses.append(f"c.msn IN ({placeholders})")
+            where_clauses.append("c.msn IN (" + placeholders + ")")
             params.extend(msn)
         if cursor:
             where_clauses.append("c.id < ?")
@@ -580,11 +580,10 @@ class Database:
 
         params.append(limit)
         db_cursor = await self.db.execute(
-            f"""SELECT c.*,
-                       COALESCE(cc.name, c.caller_number) AS caller_display,
-                       COALESCE(ca.name, c.called_number) AS called_display
-                FROM calls c{join}{where}
-                ORDER BY c.id DESC LIMIT ?""",
+            "SELECT c.*,"
+            " COALESCE(cc.name, c.caller_number) AS caller_display,"
+            " COALESCE(ca.name, c.called_number) AS called_display"
+            " FROM calls c" + join + where + " ORDER BY c.id DESC LIMIT ?",
             params,
         )
         rows = await db_cursor.fetchall()
