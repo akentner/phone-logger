@@ -26,6 +26,18 @@ EVENT_MAP = {
     "DISCONNECT": CallEventType.DISCONNECT,
 }
 
+# Minimum required field count per event type (including date field at index 0).
+# RING:       date;RING;conn;caller;called             -> 5
+# CALL:       date;CALL;conn;ext;caller;called         -> 6
+# CONNECT:    date;CONNECT;conn;ext;number             -> 5
+# DISCONNECT: date;DISCONNECT;conn;duration            -> 4
+MIN_FIELDS: dict[CallEventType, int] = {
+    CallEventType.RING: 5,
+    CallEventType.CALL: 6,
+    CallEventType.CONNECT: 5,
+    CallEventType.DISCONNECT: 4,
+}
+
 
 class FritzCallmonitorAdapter(BaseInputAdapter):
     """
@@ -146,6 +158,17 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
 
         event_type = EVENT_MAP.get(event_name)
         if not event_type:
+            logger.debug("Unknown Fritz event type '%s' | raw: %s", event_name, line)
+            return None
+
+        if len(parts) < MIN_FIELDS[event_type]:
+            logger.warning(
+                "Fritz parse error [%s]: need %d fields, got %d | raw: %s",
+                event_type.value,
+                MIN_FIELDS[event_type],
+                len(parts),
+                line,
+            )
             return None
 
         try:

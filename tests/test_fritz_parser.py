@@ -2,8 +2,6 @@
 
 import logging
 
-import pytest
-
 from src.adapters.input.fritz_callmonitor import FritzCallmonitorAdapter
 from src.core.event import CallDirection, CallEventType
 
