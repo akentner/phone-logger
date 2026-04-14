@@ -7,6 +7,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from src.adapters.base import BaseResolverAdapter
+from src.adapters.resolver.errors import NetworkError, RateLimitError
 from src.config import AdapterConfig
 from src.core.event import ResolveResult
 from src.db.database import Database
@@ -104,6 +105,8 @@ class TellowsResolver(BaseResolverAdapter):
                     response.status,
                     response.headers.get("content-type", "?"),
                 )
+                if response.status == 429:
+                    raise RateLimitError(f"Rate limited by {self.name} for {number!r} (HTTP 429)")
                 if response.status != 200:
                     self.logger.info(
                         "Tellows returned HTTP %d for %r — skipping",
@@ -117,8 +120,7 @@ class TellowsResolver(BaseResolverAdapter):
                 return self._parse_html(number, html)
 
         except aiohttp.ClientError as e:
-            self.logger.error("Request failed for %r: %s", number, e)
-            return None
+            raise NetworkError(f"Request failed for {number!r}: {e}") from e
 
     def _parse_html(self, number: str, html: str) -> Optional[ResolveResult]:
         """Parse tellows.de HTML for caller information."""

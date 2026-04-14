@@ -2,7 +2,10 @@
 
 from typing import Optional
 
+import aiosqlite
+
 from src.adapters.base import BaseResolverAdapter
+from src.adapters.resolver.errors import ResolverError
 from src.config import AdapterConfig
 from src.core.event import ResolveResult
 from src.db.database import Database
@@ -21,7 +24,10 @@ class SqliteResolver(BaseResolverAdapter):
 
     async def resolve(self, number: str) -> Optional[ResolveResult]:
         """Look up a number in the SQLite contacts table. Expects E.164 input."""
-        contact = await self.db.get_contact(number)
+        try:
+            contact = await self.db.get_contact(number)
+        except aiosqlite.Error as e:
+            raise ResolverError(f"SQLite lookup failed for {number!r}: {e}") from e
 
         if not contact:
             self.logger.debug("No match for %r in SQLite contacts", number)
@@ -29,8 +35,10 @@ class SqliteResolver(BaseResolverAdapter):
 
         self.logger.debug("Match for %r in SQLite: %s", number, contact.get("name"))
 
-        # Update last_seen timestamp
-        await self.db.update_last_seen(contact["number"])
+        try:
+            await self.db.update_last_seen(contact["number"])
+        except aiosqlite.Error as e:
+            raise ResolverError(f"SQLite update_last_seen failed for {number!r}: {e}") from e
 
         return ResolveResult(
             number=number,
