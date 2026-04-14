@@ -13,7 +13,7 @@ This roadmap transforms the codebase from working-but-untested into production-r
 
 - [x] **Phase 1: Foundation** - Ruff, Coverage, Audit, Dependency Updates (completed 2026-04-13)
 - [ ] **Phase 2: Code Quality** - SQL Safety, MQTT Cleanup, Dead Code Removal
-- [ ] **Phase 3: Error Handling & Robustness** - Resolver Errors, Parser Validation, MQTT Logging
+- [x] **Phase 3: Error Handling & Robustness** - Resolver Errors, Parser Validation, MQTT Logging (completed 2026-04-14)
 - [ ] **Phase 4: Testing & Validation** - API Routes, MQTT Scenarios, Edge Cases
 
 ## Phase Details
@@ -75,8 +75,8 @@ Plans:
 
 Plans:
 - [x] 03-01-PLAN.md — Resolver error hierarchy: create errors.py, refactor chain.py, add typed raises to 4 resolvers
-- [ ] 03-02-PLAN.md — Fritz parser validation: MIN_FIELDS constant + guard in _parse_line(), unknown event debug log
-- [ ] 03-03-PLAN.md — MQTT reconnect logging: _reconnect_attempts counter + 4 log events in _run_loop/_connect
+- [x] 03-02-PLAN.md — Fritz parser validation: MIN_FIELDS constant + guard in _parse_line(), unknown event debug log
+- [x] 03-03-PLAN.md — MQTT reconnect logging: _reconnect_attempts counter + 4 log events in _run_loop/_connect
 
 ---
 
@@ -103,7 +103,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete   | 2026-04-13 |
 | 2. Code Quality | 0/2 | Planned    |  |
-| 3. Error Handling & Robustness | 1/3 | In Progress|  |
+| 3. Error Handling & Robustness | 3/3 | Complete   | 2026-04-14 |
 | 4. Testing & Validation | 0/4 | Not started | — |
 
 ---
