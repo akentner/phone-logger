@@ -1,5 +1,6 @@
 """Tests for call aggregation functionality."""
 
+import logging
 import pytest
 import tempfile
 from datetime import UTC, datetime
@@ -483,3 +484,162 @@ async def test_get_calls_filter_by_msn(test_db):
     calls, next_cursor = await db.get_calls(msn=["+49000000"])
     assert next_cursor is None
     assert calls == []
+
+
+class TestCallAggregationEdgeCases:
+    """Test suite for call aggregation edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_disconnect_without_ring_creates_orphan_record(self, test_db, caplog):
+        """
+        DISCONNECT without prior RING/CALL: orphan call.
+
+        Scenario: DISCONNECT event arrives without a prior RING/CALL (connection_id unknown).
+        - Expected: No exception, graceful handling, WARNING logged
+        - Database: No call record created (connection_id 999 unknown)
+        """
+        config = AdapterConfig(type="call_log", name="test_call_log", enabled=True)
+        adapter = CallLogOutputAdapter(config, test_db)
+
+        disconnect_event = CallEvent(
+            number="",
+            direction=CallDirection.INBOUND,
+            event_type=CallEventType.DISCONNECT,
+            connection_id="999",
+        )
+
+        # Handle DISCONNECT for unknown connection_id
+        with caplog.at_level(logging.WARNING):
+            await adapter.handle(disconnect_event, None)
+
+        # Verify: no crash, no exception
+        # Database lookup for connection_id 999 returns None (no call was created)
+        call = await test_db.get_call_by_connection_id(999)
+        assert call is None, "Orphan DISCONNECT should not create a call record"
+
+        # Verify WARNING was logged (from line 209 of call_log.py)
+        warning_records = [
+            r for r in caplog.records
+            if r.levelno == logging.WARNING
+            and "DISCONNECT" in r.message
+            and "unknown" in r.message.lower()
+        ]
+        assert len(warning_records) >= 1, "Expected WARNING log for DISCONNECT without prior RING"
+
+    @pytest.mark.asyncio
+    async def test_connect_without_prior_disconnect_completes_normally(self, test_db):
+        """
+        CONNECT without prior DISCONNECT: duplicate CONNECT handling.
+
+        Scenario: RING → CONNECT → CONNECT (again) → DISCONNECT
+        - Expected: All events process without exception, final status is 'answered'
+        - Database: Call exists with correct status and duration calculated from connected time
+        """
+        config = AdapterConfig(type="call_log", name="test_call_log", enabled=True)
+        adapter = CallLogOutputAdapter(config, test_db)
+
+        # Step 1: RING event creates call record
+        ring = CallEvent(
+            number="+491701234567",
+            direction=CallDirection.INBOUND,
+            event_type=CallEventType.RING,
+            connection_id="100",
+            caller_number="+491701234567",
+            called_number="+496301234567",
+        )
+        await adapter.handle(ring, None)
+
+        # Verify call created in ringing state
+        call = await test_db.get_call_by_connection_id(100)
+        assert call is not None
+        assert call["status"] == "ringing"
+
+        # Step 2: First CONNECT updates to answered
+        connect1 = CallEvent(
+            number="+491701234567",
+            direction=CallDirection.INBOUND,
+            event_type=CallEventType.CONNECT,
+            connection_id="100",
+        )
+        await adapter.handle(connect1, None)
+
+        call = await test_db.get_call_by_connection_id(100)
+        assert call["status"] == "answered"
+        assert call["connected_at"] is not None
+
+        # Step 3: Second CONNECT (duplicate) — should not crash
+        connect2 = CallEvent(
+            number="+491701234567",
+            direction=CallDirection.INBOUND,
+            event_type=CallEventType.CONNECT,
+            connection_id="100",
+        )
+        await adapter.handle(connect2, None)
+
+        # Verify still answered (duplicate CONNECT doesn't break state)
+        call = await test_db.get_call_by_connection_id(100)
+        assert call["status"] == "answered"
+        assert call["connected_at"] is not None
+
+        # Step 4: DISCONNECT ends call
+        disconnect = CallEvent(
+            number="",
+            direction=CallDirection.INBOUND,
+            event_type=CallEventType.DISCONNECT,
+            connection_id="100",
+        )
+        await adapter.handle(disconnect, None)
+
+        # Verify final state
+        call = await test_db.get_call_by_connection_id(100)
+        assert call is not None
+        assert call["status"] == "answered"
+        assert call["finished_at"] is not None
+        assert call["duration_seconds"] >= 0
+
+    @pytest.mark.asyncio
+    async def test_missing_ring_missing_connect_ends_in_unknown_state(self, test_db):
+        """
+        CALL → DISCONNECT without CONNECT: outbound call not reached.
+
+        Scenario: CALL event (outbound), then immediately DISCONNECT without CONNECT.
+        - Expected: Call created with status 'dialing', then finalized as 'notReached'
+        - Database: duration_seconds should be 0 (no answer period)
+        """
+        config = AdapterConfig(type="call_log", name="test_call_log", enabled=True)
+        adapter = CallLogOutputAdapter(config, test_db)
+
+        # Step 1: CALL event creates outbound call record
+        call_event = CallEvent(
+            number="+491701234567",
+            direction=CallDirection.OUTBOUND,
+            event_type=CallEventType.CALL,
+            connection_id="101",
+            caller_number="+496301234567",
+            called_number="+491701234567",
+        )
+        await adapter.handle(call_event, None)
+
+        # Verify call created in dialing state
+        call = await test_db.get_call_by_connection_id(101)
+        assert call is not None
+        assert call["status"] == "dialing"
+        assert call["direction"] == "outbound"
+        assert call["connected_at"] is None
+
+        # Step 2: DISCONNECT without CONNECT — not reached
+        disconnect = CallEvent(
+            number="",
+            direction=CallDirection.OUTBOUND,
+            event_type=CallEventType.DISCONNECT,
+            connection_id="101",
+        )
+        await adapter.handle(disconnect, None)
+
+        # Verify final state: notReached, no answer time, duration_seconds == 0
+        call = await test_db.get_call_by_connection_id(101)
+        assert call is not None
+        assert call["status"] == "notReached"
+        assert call["connected_at"] is None
+        assert call["finished_at"] is not None
+        assert call["duration_seconds"] == 0, "No answer period, so duration should be 0"
