@@ -165,7 +165,7 @@ class Database:
             ):
                 if key == "tags":
                     value = json.dumps(value)
-                updates.append(f"{key} = ?")
+                updates.append(key + " = ?")
                 params.append(value)
 
         if not updates:
@@ -176,7 +176,7 @@ class Database:
         params.append(number)
 
         await self.db.execute(
-            f"UPDATE contacts SET {', '.join(updates)} WHERE number = ?",
+            "UPDATE contacts SET " + ", ".join(updates) + " WHERE number = ?",
             params,
         )
         await self.db.commit()
