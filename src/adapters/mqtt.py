@@ -133,6 +133,7 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
         self._task: Optional[asyncio.Task] = None
         self._running = False
         self._ready = asyncio.Event()
+        self._reconnect_attempts: int = 0
 
         # Change tracking for state topics
         self._last_line_status: dict[int, str] = {}
@@ -216,11 +217,19 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
                     "aiomqtt not installed. Install with: pip install aiomqtt"
                 )
                 break
-            except Exception:
+            except Exception as exc:
                 self.logger.exception("MQTT connection error")
                 self._client = None
                 self._ready.clear()
                 if self._running:
+                    self._reconnect_attempts += 1
+                    reason = str(exc) if exc else "unknown error"
+                    self.logger.warning("MQTT disconnected: %s", reason)
+                    self.logger.info(
+                        "MQTT reconnecting in %ds (attempt %d)",
+                        self._reconnect_delay,
+                        self._reconnect_attempts,
+                    )
                     await asyncio.sleep(self._reconnect_delay)
 
     async def _connect(self) -> None:
@@ -246,6 +255,11 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
 
         async with aiomqtt.Client(**client_kwargs) as client:
             self._client = client
+            if self._reconnect_attempts > 0:
+                self.logger.info(
+                    "MQTT reconnected after %d attempt(s)", self._reconnect_attempts
+                )
+            self._reconnect_attempts = 0  # reset after successful connection
             self.logger.info(
                 "MQTT connected to %s:%d (prefix: %s)",
                 self._broker,
@@ -276,6 +290,8 @@ class MqttAdapter(BaseInputAdapter, BaseOutputAdapter):
 
         self._client = None
         self._ready.clear()
+        if not self._running:
+            self.logger.info("MQTT disconnected: graceful shutdown")
 
     # ------------------------------------------------------------------
     # Incoming message handling (subscribe path)

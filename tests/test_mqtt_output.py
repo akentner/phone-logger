@@ -1,7 +1,6 @@
 """Tests for MqttAdapter — persistent connection, Birth/LWT,
 line/trunk state topics and HA Auto Discovery."""
 
-import asyncio
 import json
 import logging
 import sys
@@ -11,12 +10,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.adapters.mqtt import MqttAdapter, _slugify
-from src.config import AdapterConfig, AppConfig, PbxConfig, TrunkConfig, MsnConfig
+from src.config import AdapterConfig, AppConfig, PbxConfig, TrunkConfig
 from src.core.event import (
     CallDirection,
     CallEvent,
     CallEventType,
-    DeviceInfo,
     ResolveResult,
 )
 from src.core.pbx import LineState, LineStatus
@@ -536,17 +534,8 @@ class TestBirthAndLWT:
         mock_aiomqtt.Will = FakeWill
 
         # We patch _connect to avoid the asyncio.sleep infinity loop
-        birth_topics: list[str] = []
-
-        async def fake_connect(self_inner):
-            # Simulate Birth publish only
-            await self_inner._client_stub.publish(
-                f"{self_inner._topic_prefix}/status", "online", qos=1, retain=True
-            )
-
         # Simpler: directly test _connect with a real fake client
         # by monkey-patching the infinite loop
-        original_connect = adapter._connect
 
         async def patched_connect():
             import aiomqtt as _aiomqtt
