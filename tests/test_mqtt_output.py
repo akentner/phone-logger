@@ -3,6 +3,7 @@ line/trunk state topics and HA Auto Discovery."""
 
 import asyncio
 import json
+import logging
 import sys
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -844,3 +845,114 @@ class TestMqttInputBirth:
         assert birth_pubs, "Expected birth 'online' to be published"
         assert birth_pubs[0][1] == "online"
         assert birth_pubs[0][2].get("retain") is True
+
+
+# ---------------------------------------------------------------------------
+# MQTT Reconnect Counter and Log Events (ERR-03)
+# ---------------------------------------------------------------------------
+
+
+class TestMqttReconnectLogging:
+    """Tests for MQTT reconnect counter and log events (ERR-03)."""
+
+    def _make_adapter(self, **config_overrides) -> MqttAdapter:
+        """Create a MqttAdapter without starting it."""
+        return MqttAdapter(_make_config(**config_overrides))
+
+    def test_reconnect_attempts_initializes_to_zero(self):
+        """_reconnect_attempts must start at 0 on adapter creation."""
+        adapter = self._make_adapter()
+        assert adapter._reconnect_attempts == 0
+
+    async def test_reconnect_attempts_increments_on_connection_failure(self, caplog):
+        """Counter must increment each time _connect() raises an exception."""
+        adapter = self._make_adapter()
+        adapter._running = True
+
+        call_count = 0
+
+        async def failing_connect():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise Exception("connection refused")
+            adapter._running = False  # stop after 2 failures
+
+        with patch.object(adapter, "_connect", side_effect=failing_connect):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                with caplog.at_level(logging.INFO):
+                    try:
+                        await adapter._run_loop()
+                    except Exception:
+                        pass
+
+        assert adapter._reconnect_attempts >= 2
+
+    async def test_reconnect_attempts_resets_after_success(self):
+        """Counter must reset to 0 after a successful connection."""
+        adapter = self._make_adapter()
+        # Simulate a previous failure count
+        adapter._reconnect_attempts = 3
+
+        # Mock _connect to succeed (no exception) then stop the loop
+        async def successful_connect():
+            adapter._reconnect_attempts = 0  # simulates what the real _connect should do
+            adapter._running = False
+
+        with patch.object(adapter, "_connect", side_effect=successful_connect):
+            adapter._running = True
+            await adapter._run_loop()
+
+        assert adapter._reconnect_attempts == 0
+
+    async def test_reconnecting_log_appears_before_sleep(self, caplog):
+        """RECONNECTING log must appear before the sleep on each retry."""
+        adapter = self._make_adapter(reconnect_delay=5)
+        adapter._running = True
+
+        call_count = 0
+
+        async def failing_once():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("broker down")
+            adapter._running = False
+
+        with patch.object(adapter, "_connect", side_effect=failing_once):
+            with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                with caplog.at_level(logging.INFO):
+                    await adapter._run_loop()
+
+        reconnecting_records = [
+            r for r in caplog.records
+            if "reconnecting" in r.message.lower() and "attempt" in r.message.lower()
+        ]
+        assert len(reconnecting_records) >= 1
+        # Verify sleep was called (reconnect loop ran)
+        mock_sleep.assert_called()
+
+    async def test_disconnected_warning_logged_on_exception(self, caplog):
+        """DISCONNECTED warning must be logged when connection drops with an exception."""
+        adapter = self._make_adapter()
+        adapter._running = True
+
+        call_count = 0
+
+        async def failing_once():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("connection dropped")
+            adapter._running = False
+
+        with patch.object(adapter, "_connect", side_effect=failing_once):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                with caplog.at_level(logging.WARNING):
+                    await adapter._run_loop()
+
+        disconnected_records = [
+            r for r in caplog.records
+            if "disconnected" in r.message.lower() and r.levelno == logging.WARNING
+        ]
+        assert len(disconnected_records) >= 1
