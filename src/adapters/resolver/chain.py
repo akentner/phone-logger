@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 
 from src.adapters.base import BaseResolverAdapter
+from src.adapters.resolver.errors import NetworkError, RateLimitError, ResolverError
 from src.core.event import ResolveResult
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,15 @@ class ResolverChain:
                                 number, adapter.name, result.name)
                     return result
                 logger.debug("Adapter '%s' could not resolve '%s'", adapter.name, number)
+            except NetworkError as exc:
+                logger.warning("Adapter '%s' [NETWORK_ERROR] for '%s': %s", adapter.name, number, exc)
+                continue
+            except RateLimitError as exc:
+                logger.warning("Adapter '%s' [RATE_LIMITED] for '%s': %s", adapter.name, number, exc)
+                continue
+            except ResolverError as exc:
+                logger.exception("Adapter '%s' [RESOLVER_ERROR] for '%s': %s", adapter.name, number, exc)
+                continue
             except Exception:
                 logger.exception("Adapter '%s' failed for number '%s'", adapter.name, number)
                 continue
