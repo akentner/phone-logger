@@ -33,8 +33,8 @@
 ### Code-Qualität
 
 - [ ] **CODE-01**: f-string SQL-Concatenation in `src/db/database.py` durch sichere parametrisierte Patterns ersetzt
-- [ ] **CODE-02**: Uncommitted Änderungen in `src/adapters/mqtt.py` gereviewed, aufgeräumt und committet
-- [ ] **CODE-03**: Dead Code entfernt (ungenutzte Imports, unerreichbare Branches, tote Variablen)
+- [x] **CODE-02**: Uncommitted Änderungen in `src/adapters/mqtt.py` gereviewed, aufgeräumt und committet
+- [x] **CODE-03**: Dead Code entfernt (ungenutzte Imports, unerreichbare Branches, tote Variablen)
 
 ## v2 Requirements
 
@@ -77,8 +77,8 @@
 | DEP-02 | Phase 1 | Complete |
 | DEP-03 | Phase 1 | Complete |
 | CODE-01 | Phase 2 | Pending |
-| CODE-02 | Phase 2 | Pending |
-| CODE-03 | Phase 2 | Pending |
+| CODE-02 | Phase 2 | Complete |
+| CODE-03 | Phase 2 | Complete |
 
 **Coverage:**
 - v1 requirements: 16 total
