@@ -1,14 +1,37 @@
-# phone-logger — Cleanup & Sanitize
+# phone-logger — Shipped: v1.0 Cleanup & Sanitize
+
+## Current State (v1.0)
+
+**Status:** COMPLETE ✓  
+**Released:** 2026-04-15  
+**All 16 Requirements Satisfied**
+
+### v1.0 Accomplishments
+
+- **Dev Tooling:** Ruff (E/F/W at 120-char) configured + zero violations; pytest-cov integrated with 51% baseline coverage
+- **Secure Dependencies:** 11 CVEs resolved (aiohttp 3.13.5, pygments 2.20.0, starlette 1.0.0); httpx moved to dev-only
+- **Code Safety:** 5 f-string SQL patterns replaced with parametrized queries; MQTT display-name bug fixed; Ruff-clean codebase
+- **Error Handling:** Typed exception hierarchy (NetworkError, RateLimitError, ResolverError) in resolver chain; Fritz parser validates field count; MQTT logs reconnect attempts
+- **Test Coverage:** API routes (TestClient), MQTT offline scenarios, call aggregation edge cases, Fritz parser idempotency — 41 new tests added, 241 total, zero regressions
+
+**Test Suite:** 241 passing | **Coverage:** 66% | **Regressions:** 0
+
+---
+
+<details>
+<summary><b>Previous Context (v1.0 Planning)</b></summary>
 
 ## What This Is
 
 phone-logger ist ein FastAPI-basierter Telefon-Call-Monitor, der Anrufereignisse vom Fritz!Box Callmonitor empfängt, Nummern über eine Resolver-Chain (SQLite, Tellows, DasTelefonbuch u.a.) auflöst und Ergebnisse via MQTT, Webhooks und SQLite persistiert. Das System läuft als Home Assistant Add-on und hat eine eigene Web-UI für Monitoring und Kontaktverwaltung.
 
-Dieses Milestone konzentriert sich auf **Cleanup & Sanitize** — keine neuen Features, sondern Verbesserung der Codebase-Qualität, Test-Coverage, Dev-Tooling und Dependency-Hygiene.
+Das v1.0 Milestone konzentrierte sich auf **Cleanup & Sanitize** — keine neuen Features, sondern Verbesserung der Codebase-Qualität, Test-Coverage, Dev-Tooling und Dependency-Hygiene.
 
 ## Core Value
 
 Der Pipeline-Kern (Normalisierung → Resolver → Output) muss zuverlässig und klar nachvollziehbar bleiben — das ist die einzige Garantie, die zählt.
+
+</details>
 
 ## Requirements
 
