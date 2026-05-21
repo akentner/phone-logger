@@ -337,7 +337,7 @@ class Database:
         )
         rows = await db_cursor.fetchall()
         result = [dict(row) for row in rows]
-        next_cursor = result[-1]["id"] if len(result) == limit else None
+        next_cursor = str(result[-1]["id"]) if len(result) == limit else None
         return result, next_cursor
 
     # --- Call Log Operations ---
@@ -397,7 +397,7 @@ class Database:
         )
         rows = await db_cursor.fetchall()
         result = [dict(row) for row in rows]
-        next_cursor = result[-1]["id"] if len(result) == limit else None
+        next_cursor = str(result[-1]["id"]) if len(result) == limit else None
         return result, next_cursor
 
     # --- Call Aggregation Operations ---
@@ -588,7 +588,7 @@ class Database:
         )
         rows = await db_cursor.fetchall()
         result = [self._row_to_call(row) for row in rows]
-        next_cursor = result[-1]["id"] if len(result) == limit else None
+        next_cursor = str(result[-1]["id"]) if len(result) == limit else None
         return result, next_cursor
 
     async def get_call_by_connection_id(self, connection_id: int) -> Optional[dict]:
