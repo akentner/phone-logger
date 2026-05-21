@@ -1,48 +1,9 @@
-"""GUI routes for Jinja2 rendered pages."""
+"""GUI routes — React SPA is served via StaticFiles in app.py.
 
-import logging
-from pathlib import Path
+This module is kept for potential server-side additions (e.g. injecting
+window.__ingress_path). Currently empty.
+"""
 
-from fastapi import APIRouter, Request
-from fastapi.templating import Jinja2Templates
-
-logger = logging.getLogger(__name__)
+from fastapi import APIRouter
 
 router = APIRouter(tags=["gui"])
-templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-
-
-@router.get("/")
-async def index(request: Request):
-    """Redirect to PBX page."""
-    return templates.TemplateResponse(request, "pbx.html", {"active": "pbx"})
-
-
-@router.get("/pbx")
-async def pbx_page(request: Request):
-    """PBX status page."""
-    return templates.TemplateResponse(request, "pbx.html", {"active": "pbx"})
-
-
-@router.get("/contacts")
-async def contacts_page(request: Request):
-    """Contacts management page."""
-    return templates.TemplateResponse(request, "contacts.html", {"active": "contacts"})
-
-
-@router.get("/calls")
-async def calls_page(request: Request):
-    """Call history page."""
-    return templates.TemplateResponse(request, "calls.html", {"active": "calls"})
-
-
-@router.get("/cache")
-async def cache_page(request: Request):
-    """Cache management page."""
-    return templates.TemplateResponse(request, "cache.html", {"active": "cache"})
-
-
-@router.get("/config")
-async def config_page(request: Request):
-    """Configuration page."""
-    return templates.TemplateResponse(request, "config.html", {"active": "config"})

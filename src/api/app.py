@@ -40,9 +40,14 @@ def create_app(lifespan=None) -> FastAPI:
 
     app.add_middleware(IngressRootPathMiddleware)
 
-    # Mount static files
+    return app
+
+
+def mount_static(app: FastAPI) -> None:
+    """Mount the React SPA static files — call AFTER all API routers are registered.
+
+    Must be last so the catch-all '/' mount does not shadow API routes.
+    """
     static_path = Path(__file__).parent.parent / "gui" / "static"
     if static_path.exists():
-        app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
-
-    return app
+        app.mount("/", StaticFiles(directory=str(static_path), html=True), name="static")

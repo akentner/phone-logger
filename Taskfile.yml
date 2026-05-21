@@ -9,8 +9,26 @@ tasks:
   # --- Development ---
 
   install:
-    desc: Install dependencies
+    desc: Install all dependencies (Python + frontend)
+    cmds:
+      - uv sync
+      - npm ci --prefix src/frontend
+
+  install:python:
+    desc: Install Python dependencies
     cmd: uv sync
+
+  install:frontend:
+    desc: Install frontend dependencies
+    cmd: npm ci --prefix src/frontend
+
+  build:frontend:
+    desc: Build React frontend (output to src/gui/static/)
+    cmd: npm run build --prefix src/frontend
+
+  dev:frontend:
+    desc: Vite dev server with proxy to localhost:8080
+    cmd: npm run dev --prefix src/frontend
 
   dev:
     desc: Run server with dev config

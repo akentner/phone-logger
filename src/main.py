@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 
-from src.api.app import create_app
+from src.api.app import create_app, mount_static
 from src.api.routes import resolve, contacts, calls, cache, config as config_routes, i18n, pbx
 from src.config import AppConfig, load_config
 from src.core.pipeline import Pipeline
@@ -104,6 +104,8 @@ def create_application():
     # Register GUI routes
     app.include_router(gui_router)
 
+    # Mount SPA static files last — catch-all '/' must not shadow API routes
+    mount_static(app)
 
     return app
 
