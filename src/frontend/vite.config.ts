@@ -30,6 +30,7 @@ export default defineConfig({
       },
     }),
   ],
+  base: './',
   build: {
     outDir: '../gui/static',
     emptyOutDir: true,
