@@ -155,8 +155,8 @@ class TestFritzConnectionReconnect:
             server.close()
             await server.wait_closed()
 
-    async def test_default_readline_timeout_is_300_seconds(self):
-        """When not in config, ``readline_timeout`` defaults to 300.0."""
+    async def test_default_readline_timeout_is_1800_seconds(self):
+        """When not in config, ``readline_timeout`` defaults to 1800.0."""
         config = AdapterConfig(
             type="fritz_callmonitor",
             name="fritz_callmonitor",
@@ -164,7 +164,7 @@ class TestFritzConnectionReconnect:
         )
         adapter = FritzCallmonitorAdapter(config)
         assert hasattr(adapter, "_readline_timeout")
-        assert adapter._readline_timeout == 300.0
+        assert adapter._readline_timeout == 1800.0
 
     async def test_custom_readline_timeout_from_config(self):
         """When set in config, ``readline_timeout`` is respected."""

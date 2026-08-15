@@ -63,8 +63,8 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
         # without data. If the remote side (Fritz!Box) reboots without sending
         # TCP-FIN, the kernel keeps the socket in ESTABLISHED state and
         # readline() blocks forever — the timeout converts that into a clean
-        # reconnect. Default 300s; tune via config.yaml / options.json.
-        self._readline_timeout: float = float(config.config.get("readline_timeout", 300.0))
+        # reconnect. Default 1800s; tune via config.yaml / options.json.
+        self._readline_timeout: float = float(config.config.get("readline_timeout", 1800.0))
 
     async def start(self, callback: Callable[[CallEvent], Coroutine]) -> None:
         """Start listening for Fritz!Box Callmonitor events."""
