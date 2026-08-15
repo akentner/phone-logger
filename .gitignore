@@ -58,3 +58,7 @@ src/gui/static/workbox-*.js
 src/gui/static/registerSW.js
 src/gui/static/manifest.webmanifest
 src/gui/static/index.html
+
+# Agent tooling / worktrees
+.omo/
+.claude/worktrees/
