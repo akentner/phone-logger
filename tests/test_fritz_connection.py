@@ -30,6 +30,10 @@ def _make_silent_handler(state: _ServerState):
     Simulates the half-open condition: the server forgets about the
     connection (e.g. Fritz!Box reboot) without sending TCP-FIN. The
     client kernel sees ESTABLISHED, ``readline()`` blocks forever.
+
+    Blocks via ``reader.read()`` (which returns b'' on EOF) so the
+    handler naturally exits when the test shuts the adapter down,
+    allowing ``server.wait_closed()`` to complete in the test ``finally``.
     """
 
     async def handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -37,11 +41,10 @@ def _make_silent_handler(state: _ServerState):
         sock = writer.get_extra_info("socket")
         if sock is not None:
             state.sockets.append(sock)
-        # Sleep effectively forever — never sends, never closes.
         try:
-            await asyncio.sleep(3600)
-        except asyncio.CancelledError:
-            pass
+            await reader.read()
+        except Exception:
+            return
 
     return handler
 

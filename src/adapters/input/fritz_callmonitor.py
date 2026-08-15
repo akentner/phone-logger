@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import socket
 from datetime import UTC, datetime
 from typing import Callable, Coroutine, Optional
 from zoneinfo import ZoneInfo
@@ -58,6 +59,13 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
         self._running = False
         self._reconnect_delay = config.config.get("reconnect_delay", 10)
 
+        # Half-open socket guard: readline() returns after this many seconds
+        # without data. If the remote side (Fritz!Box) reboots without sending
+        # TCP-FIN, the kernel keeps the socket in ESTABLISHED state and
+        # readline() blocks forever — the timeout converts that into a clean
+        # reconnect. Default 300s; tune via config.yaml / options.json.
+        self._readline_timeout: float = float(config.config.get("readline_timeout", 300.0))
+
     async def start(self, callback: Callable[[CallEvent], Coroutine]) -> None:
         """Start listening for Fritz!Box Callmonitor events."""
         self._callback = callback
@@ -110,8 +118,46 @@ class FritzCallmonitorAdapter(BaseInputAdapter):
         self._reader, self._writer = await asyncio.open_connection(self.host, self.port)
         self.logger.info("Connected to Fritz!Box Callmonitor")
 
+        # Enable TCP keepalive so the kernel itself can detect a dead peer
+        # even when the remote side doesn't send any data. Without this,
+        # only the readline_timeout above can detect a half-open socket —
+        # with both, detection is faster (keepalive usually fires before
+        # the 300s timeout) and resilient to slow leak scenarios.
+        sock = self._writer.get_extra_info("socket")
+        if sock is not None:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            # TCP_KEEPIDLE: seconds of idle before sending first keepalive probe.
+            # TCP_KEEPINTVL: interval between probes after the first one.
+            # TCP_KEEPCNT: number of failed probes before declaring the peer dead.
+            # ~60s + 3*10s = ~90s total detection time on most networks.
+            if hasattr(socket, "TCP_KEEPIDLE"):
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+            if hasattr(socket, "TCP_KEEPINTVL"):
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+            if hasattr(socket, "TCP_KEEPCNT"):
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+        else:
+            self.logger.warning(
+                "Could not get underlying socket from StreamWriter — "
+                "SO_KEEPALIVE not set (half-open detection relies on readline_timeout only)"
+            )
+
         while self._running:
-            line = await self._reader.readline()
+            try:
+                line = await asyncio.wait_for(
+                    self._reader.readline(), timeout=self._readline_timeout
+                )
+            except asyncio.TimeoutError:
+                # Half-open socket likely (Fritz!Box reboot without FIN).
+                # Log a specific message and re-raise so _run_loop's
+                # `except Exception:` clause triggers the reconnect path.
+                self.logger.warning(
+                    "Fritz Callmonitor readline timed out after %.1fs — "
+                    "likely half-open socket, reconnecting",
+                    self._readline_timeout,
+                )
+                break
+
             if not line:
                 self.logger.warning("Fritz!Box Callmonitor connection closed")
                 break
